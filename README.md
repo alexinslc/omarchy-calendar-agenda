@@ -3,9 +3,11 @@
 A lightweight, agenda-focused Google Calendar widget for Omarchy.
 
 This project is in prototype development. The current prototype provides a
-top-right bar icon with compact day, week, and month agenda views backed by
-fixture data. Google Calendar integration is planned and will use read-only
-OAuth with support for multiple accounts and calendars.
+top-right bar icon with compact day, week, and month agenda views. It reads
+normalized events from the private Google
+sync cache when available and falls back to fixture data for development.
+Google access uses read-only OAuth with support for multiple accounts and
+calendars.
 
 ## Security model
 
@@ -57,9 +59,58 @@ Add the widget to the top-right of the bar in
 ```
 
 The `defaultSection` in `manifest.json` is `right`; `shell.json` remains the
-source of truth and can move the widget to another section. The popup is fixture-backed only. Edit `fixtures/events.json` and reload the
-shell to try different events. Google OAuth, networking, event links, and cache
-syncing are planned but intentionally not implemented in this prototype.
+source of truth and can move the widget to another section. The popup reads the
+sync cache at
+`~/.local/state/omarchy/calendar-agenda/events.json`, reloads it when the
+file changes, and checks for updates while the shell is running. If no cache
+exists, it clearly labels the fixture data being shown. Google Calendar
+synchronization is a one-shot command for now; periodic 15-minute scheduling
+will be added in a later phase.
+
+## Google sync foundation
+
+The helper uses Python's standard library only. It reads this configuration
+file (no client secret is used):
+`~/.config/omarchy/calendar-agenda/config.json`
+
+```json
+{
+  "google": {
+    "client_id": "YOUR-OAUTH-CLIENT-ID.apps.googleusercontent.com",
+    "accounts": ["personal", "work"]
+  }
+}
+```
+
+Create an OAuth client in Google Cloud as a desktop application and add one
+stable local account ID for each Google account. Install `secret-tool` and a
+Secret Service provider (for example, GNOME Keyring or KeePassXC), then
+authorize each configured account:
+
+```bash
+python3 -m sync.cli --authorize --account personal
+python3 -m sync.cli --sync
+```
+
+`--authorize` opens the browser and uses read-only authorization-code PKCE
+with a random state and a loopback-only callback. Refresh tokens are stored
+under Secret Service attributes `service=omarchy-calendar-agenda` and
+`account=google:<account-id>`. If Secret Service is unavailable, authorization
+and sync fail clearly; there is no plaintext fallback. Use
+`--disconnect --account personal` to revoke and remove a stored token.
+
+The helper lists every calendar for every configured account, follows API
+pagination, and normalizes Google events to the existing QML contract:
+`title`, `start`, `end`, `allDay`, and `location`. Canceled events are omitted
+and missing Google summaries are represented explicitly as `(untitled event)`.
+The cache is written atomically, with mode `0600`, at:
+`~/.local/state/omarchy/calendar-agenda/events.json`
+
+Data flow is: config → browser OAuth → Secret Service refresh token → fixed
+Google HTTPS endpoints → normalized in-memory events → atomic cache write.
+Tokens never appear in command-line arguments, logs, or files. Tests mock
+browser, Secret Service, and HTTP boundaries; they never require credentials or
+make network calls.
 
 If a local Quickshell runtime is available, model checks can be run with:
 

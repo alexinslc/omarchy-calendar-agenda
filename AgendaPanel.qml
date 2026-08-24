@@ -17,6 +17,9 @@ Panel {
     property string viewMode: "day"
     property var events: []
     property var groups: []
+    property string dataState: "loading"
+    property string dataMessage: "Loading calendar data..."
+    readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/events.json"
 
     readonly property color contentForeground: bar ? bar.foreground : Color.foreground
     readonly property color contentBackground: Color.background
@@ -24,18 +27,24 @@ Panel {
     readonly property color accentForeground: Color.accent
     readonly property string title: AgendaModel.viewTitle(viewMode, anchorDate)
 
-    function loadEvents(text) {
+    function loadEvents(text, fromCache) {
         var data
         try {
             data = JSON.parse(text)
         } catch (error) {
-            if (error && error.name === "SyntaxError") {
-                console.error("calendar fixture contains invalid JSON:", error.message)
-                return
+            console.error(
+                fromCache ? "calendar cache contains invalid JSON:" : "calendar fixture contains invalid JSON:",
+                error.message
+            )
+            if (fromCache) {
+                root.dataState = "error"
+                root.dataMessage = "Calendar data is unavailable."
             }
-            throw error
+            return
         }
         root.events = AgendaModel.parseEvents(data)
+        root.dataState = fromCache ? "ready" : "fixture"
+        root.dataMessage = fromCache ? "" : "Using development fixture data."
         rebuild()
     }
 
@@ -60,6 +69,7 @@ Panel {
     }
 
     function open() {
+        cacheFile.reload()
         root.controller.show()
     }
 
@@ -75,7 +85,32 @@ Panel {
     FileView {
         id: fixtureFile
         path: Qt.resolvedUrl("fixtures/events.json")
-        onLoaded: root.loadEvents(text())
+        onLoaded: {
+            if (root.dataState !== "error" && root.dataState !== "ready")
+                root.loadEvents(text(), false)
+        }
+    }
+
+    FileView {
+        id: cacheFile
+        path: root.cachePath
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.loadEvents(text(), true)
+        onLoadFailed: {
+            if (root.dataState !== "ready") {
+                root.dataState = "fixture"
+                root.dataMessage = "Using development fixture data."
+            }
+        }
+    }
+
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        onTriggered: cacheFile.reload()
     }
 
     KeyboardPanel {
@@ -204,6 +239,16 @@ Panel {
                             onClicked: root.move(1)
                         }
                     }
+                }
+
+                Text {
+                    visible: root.dataState !== "ready" && root.dataMessage !== ""
+                    width: parent.width
+                    text: root.dataMessage
+                    color: root.dataState === "error" ? root.accentForeground : root.mutedForeground
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.Wrap
                 }
 
                 Flickable {
