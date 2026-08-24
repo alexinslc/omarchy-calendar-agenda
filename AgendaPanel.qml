@@ -84,7 +84,6 @@ Panel {
         owner: root.hostWidget || root
         bar: root.bar
         open: root.opened
-        centerOnBar: true
         focusTarget: keyCatcher
         contentWidth: Style.space(420)
         contentHeight: Style.space(520)
