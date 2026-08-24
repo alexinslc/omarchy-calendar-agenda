@@ -1,7 +1,9 @@
 import json
+import shutil
 import stat
 import subprocess
 import unittest
+import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,7 +30,7 @@ class ConfigTests(unittest.TestCase):
         self.path = self.directory / "config.json"
 
     def tearDown(self) -> None:
-        self.path.unlink(missing_ok=True)
+        shutil.rmtree(self.directory, ignore_errors=True)
 
     def test_loads_client_id_and_account_ids(self) -> None:
         self.path.write_text(
@@ -77,7 +79,7 @@ class CacheTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertFalse(list(directory.glob(".events.json.*.tmp")))
         finally:
-            path.unlink(missing_ok=True)
+            shutil.rmtree(directory, ignore_errors=True)
 
 
 class GoogleTests(unittest.TestCase):
@@ -165,6 +167,7 @@ class GoogleTests(unittest.TestCase):
                 {"items": [{"summary": "Second"}]},
             ]
         )
+        requests = []
 
         class Response:
             def __enter__(self):
@@ -176,13 +179,23 @@ class GoogleTests(unittest.TestCase):
             def read(self):
                 return json.dumps(next(responses)).encode("utf-8")
 
-        with patch("sync.google.urllib.request.urlopen", side_effect=lambda *args, **kwargs: Response()):
+        def open_url(request, **kwargs):
+            requests.append(request)
+            return Response()
+
+        with patch("sync.google.urllib.request.urlopen", side_effect=open_url):
             client = GoogleCalendarClient("access-token")
             calendars = client.list_calendars()
             events = client.list_events("primary")
 
         self.assertEqual([calendar["id"] for calendar in calendars], ["primary", "work"])
         self.assertEqual([event["summary"] for event in events], ["First", "Second"])
+        event_query = urllib.parse.parse_qs(urllib.parse.urlsplit(requests[2].full_url).query)
+        self.assertNotIn("calendarId", event_query)
+        self.assertEqual(
+            urllib.parse.unquote(urllib.parse.urlsplit(requests[2].full_url).path),
+            "/calendar/v3/calendars/primary/events",
+        )
 
 
 if __name__ == "__main__":

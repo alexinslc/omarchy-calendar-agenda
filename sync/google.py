@@ -295,13 +295,19 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if parsed.path != CALLBACK_PATH:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
-        values = urllib.parse.parse_qs(parsed.query, strict_parsing=False)
-        result = {
-            "code": values["code"][0],
-            "state": values["state"][0],
-        } if "code" in values and "state" in values else {
-            "error": values.get("error", ["missing authorization response"])[0]
-        }
+        values = urllib.parse.parse_qs(
+            parsed.query,
+            keep_blank_values=True,
+            strict_parsing=False,
+        )
+        code = values.get("code", [""])[0]
+        callback_state = values.get("state", [""])[0]
+        if code and callback_state:
+            result = {"code": code, "state": callback_state}
+        else:
+            result = {
+                "error": values.get("error", ["missing authorization response"])[0]
+            }
         self._result_queue.put(result)
         body = b"Authorization received. You can close this window."
         self.send_response(HTTPStatus.OK)
@@ -336,7 +342,7 @@ def authorize(client_id: str) -> tuple[str, OAuthToken]:
         if result.get("state") != state:
             raise OAuthError("Google authorization state did not match")
         if "error" in result:
-            raise OAuthError("Google authorization was denied")
+            raise OAuthError(f"Google authorization failed: {result['error']}")
         return exchange_code(client_id, result["code"], verifier, redirect_uri)
     finally:
         server.shutdown()
@@ -395,7 +401,6 @@ class GoogleCalendarClient:
         seen_tokens: set[str] = set()
         while True:
             params = {
-                "calendarId": calendar_id,
                 "singleEvents": "true",
                 "showDeleted": "false",
                 "maxResults": "2500",
@@ -407,7 +412,12 @@ class GoogleCalendarClient:
                 params["timeMax"] = time_max
             if page_token:
                 params["pageToken"] = page_token
-            data = self._get("/calendars/" + urllib.parse.quote(calendar_id, safe=""), params)
+            data = self._get(
+                "/calendars/"
+                + urllib.parse.quote(calendar_id, safe="")
+                + "/events",
+                params,
+            )
             items = data.get("items")
             if not isinstance(items, list):
                 raise GoogleApiError("event list response has no items list")
