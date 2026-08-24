@@ -37,8 +37,11 @@ Panel {
                 error.message
             )
             if (fromCache) {
+                root.dataState = "fixture"
+                root.dataMessage = "Using development fixture data (cache unavailable)."
+            } else {
                 root.dataState = "error"
-                root.dataMessage = "Calendar data is unavailable."
+                root.dataMessage = "Calendar fixture data is unavailable."
             }
             return
         }
