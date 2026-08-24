@@ -27,27 +27,22 @@ Panel {
     readonly property color accentForeground: Color.accent
     readonly property string title: AgendaModel.viewTitle(viewMode, anchorDate)
 
-    function loadEvents(text, fromCache) {
+    function loadEvents(text) {
         var data
         try {
             data = JSON.parse(text)
         } catch (error) {
             console.error(
-                fromCache ? "calendar cache contains invalid JSON:" : "calendar fixture contains invalid JSON:",
+                "calendar cache contains invalid JSON:",
                 error.message
             )
-            if (fromCache) {
-                root.dataState = "fixture"
-                root.dataMessage = "Using development fixture data (cache unavailable)."
-            } else {
-                root.dataState = "error"
-                root.dataMessage = "Calendar fixture data is unavailable."
-            }
+            root.dataState = "error"
+            root.dataMessage = "Calendar data is unavailable. Run a sync to refresh it."
             return
         }
         root.events = AgendaModel.parseEvents(data)
-        root.dataState = fromCache ? "ready" : "fixture"
-        root.dataMessage = fromCache ? "" : "Using development fixture data."
+        root.dataState = "ready"
+        root.dataMessage = ""
         rebuild()
     }
 
@@ -86,26 +81,15 @@ Panel {
     }
 
     FileView {
-        id: fixtureFile
-        path: Qt.resolvedUrl("fixtures/events.json")
-        onLoaded: {
-            if (root.dataState !== "error" && root.dataState !== "ready")
-                root.loadEvents(text(), false)
-        }
-    }
-
-    FileView {
         id: cacheFile
         path: root.cachePath
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
-        onLoaded: root.loadEvents(text(), true)
+        onLoaded: root.loadEvents(text())
         onLoadFailed: {
-            if (root.dataState !== "ready") {
-                root.dataState = "fixture"
-                root.dataMessage = "Using development fixture data."
-            }
+            root.dataState = "error"
+            root.dataMessage = "No calendar data is available. Run a sync to refresh it."
         }
     }
 
