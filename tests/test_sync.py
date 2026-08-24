@@ -167,7 +167,7 @@ class GoogleTests(unittest.TestCase):
                 {"items": [{"summary": "Second"}]},
             ]
         )
-        requests = []
+        captured_requests = []
 
         class Response:
             def __enter__(self):
@@ -180,7 +180,7 @@ class GoogleTests(unittest.TestCase):
                 return json.dumps(next(responses)).encode("utf-8")
 
         def open_url(request, **kwargs):
-            requests.append(request)
+            captured_requests.append(request)
             return Response()
 
         with patch("sync.google.urllib.request.urlopen", side_effect=open_url):
@@ -190,10 +190,12 @@ class GoogleTests(unittest.TestCase):
 
         self.assertEqual([calendar["id"] for calendar in calendars], ["primary", "work"])
         self.assertEqual([event["summary"] for event in events], ["First", "Second"])
-        event_query = urllib.parse.parse_qs(urllib.parse.urlsplit(requests[2].full_url).query)
+        event_query = urllib.parse.parse_qs(
+            urllib.parse.urlsplit(captured_requests[2].full_url).query
+        )
         self.assertNotIn("calendarId", event_query)
         self.assertEqual(
-            urllib.parse.unquote(urllib.parse.urlsplit(requests[2].full_url).path),
+            urllib.parse.unquote(urllib.parse.urlsplit(captured_requests[2].full_url).path),
             "/calendar/v3/calendars/primary/events",
         )
 
