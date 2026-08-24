@@ -1,0 +1,72 @@
+name: Security checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-security:
+    name: Static security checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Check for forbidden capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude='security.yml' \
+            '(shell\s*:\s*true|eval\s*\(|exec\s*\(|Qt\.create|Quickshell\.exec|Process\s*\{|system\s*\(|subprocess|os\.system|os\.popen|requests\.|http://)' \
+            .; then
+            echo "Forbidden capability pattern detected. Review explicitly before merging."
+            exit 1
+          fi
+
+      - name: Check for committed secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude='security.yml' \
+            '(BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY|AIza[0-9A-Za-z_-]{20,}|[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com)' \
+            .; then
+            echo "Possible credential detected in source."
+            exit 1
+          fi
+
+      - name: Enforce Python standard library only
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="$(find sync -type f -name '*.py' -print 2>/dev/null || true)"
+          if [ -z "$files" ]; then
+            exit 0
+          fi
+          if grep -HnE '^[[:space:]]*(from|import)[[:space:]]+' $files \
+            | grep -vE ' (argparse|base64|calendar|datetime|hashlib|http|json|logging|os| pathlib|secrets|ssl|subprocess|sys|tempfile|time|typing|urllib|uuid|zoneinfo)(\.|[[:space:]]|$)'; then
+            echo "Non-standard Python import detected."
+            exit 1
+          fi
+
+      - name: Validate archive safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find . -path './.git' -prune -o -type l -print | grep -q .; then
+            echo "Symlinks are not allowed in the plugin repository."
+            exit 1
+          fi
+          if find . -path './.git' -prune -o -type f -size +2M -print | grep -q .; then
+            echo "Unexpectedly large tracked file detected."
+            exit 1
+          fi

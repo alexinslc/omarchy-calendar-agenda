@@ -1,0 +1,8 @@
+# Security-sensitive files require owner review.
+* @alexinslc
+.github/workflows/ @alexinslc
+manifest.json @alexinslc
+SECURITY.md @alexinslc
+sync/ @alexinslc
+*.qml @alexinslc
+
