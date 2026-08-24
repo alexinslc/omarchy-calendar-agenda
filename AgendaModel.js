@@ -49,12 +49,39 @@ function normalizeEvent(event) {
     }
 }
 
+function activeDateKeys(event) {
+    var start = event.allDay ? dateForKey(event.start) : new Date(event.start)
+    if (isNaN(start.getTime()) || !event.end) return [event.dateKey]
+
+    var end = event.allDay ? dateForKey(dateOnlyKey(event.end)) : new Date(event.end)
+    if (isNaN(end.getTime()) || end <= start) return [event.dateKey]
+    if (event.allDay || (end.getHours() === 0 && end.getMinutes() === 0
+            && end.getSeconds() === 0 && end.getMilliseconds() === 0)) {
+        end.setDate(end.getDate() - 1)
+    }
+
+    var keys = []
+    var cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    var last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    while (cursor <= last) {
+        keys.push(keyForDate(cursor))
+        cursor.setDate(cursor.getDate() + 1)
+    }
+    return keys
+}
+
 function parseEvents(data) {
     var source = data && data.events instanceof Array ? data.events : []
     var result = []
     for (var i = 0; i < source.length; i++) {
         var event = normalizeEvent(source[i])
-        if (event) result.push(event)
+        if (!event) continue
+        var dates = activeDateKeys(event)
+        for (var j = 0; j < dates.length; j++) {
+            var occurrence = Object.assign({}, event)
+            occurrence.dateKey = dates[j]
+            result.push(occurrence)
+        }
     }
     return result
 }
@@ -147,9 +174,15 @@ function viewTitle(mode, anchor) {
         var range = rangeFor(mode, anchor)
         var last = new Date(range.end)
         last.setDate(last.getDate() - 1)
-        return MONTH_NAMES[range.start.getMonth()] + " " + range.start.getDate()
-            + " – " + MONTH_NAMES[last.getMonth()] + " " + last.getDate()
+        var startLabel = MONTH_NAMES[range.start.getMonth()] + " " + range.start.getDate()
+        var endLabel = MONTH_NAMES[last.getMonth()] + " " + last.getDate()
+        if (range.start.getFullYear() !== last.getFullYear()) {
+            startLabel += ", " + range.start.getFullYear()
+            endLabel += ", " + last.getFullYear()
+        } else {
+            endLabel += ", " + last.getFullYear()
+        }
+        return startLabel + " – " + endLabel
     }
     return MONTH_NAMES[anchor.getMonth()] + " " + anchor.getDate() + ", " + anchor.getFullYear()
 }
-

@@ -24,12 +24,8 @@ Panel {
     readonly property color accentForeground: Color.accent
     readonly property string title: AgendaModel.viewTitle(viewMode, anchorDate)
 
-    function loadEvents() {
-        try {
-            root.events = AgendaModel.parseEvents(JSON.parse(fixtureFile.text()))
-        } catch (error) {
-            root.events = []
-        }
+    function loadEvents(text) {
+        root.events = AgendaModel.parseEvents(JSON.parse(text))
         rebuild()
     }
 
@@ -54,7 +50,6 @@ Panel {
     }
 
     function open() {
-        root.loadEvents()
         root.controller.show()
     }
 
@@ -70,10 +65,8 @@ Panel {
     FileView {
         id: fixtureFile
         path: Qt.resolvedUrl("fixtures/events.json")
-        blockLoading: true
+        onLoaded: root.loadEvents(text())
     }
-
-    Component.onCompleted: root.loadEvents()
 
     KeyboardPanel {
         id: panel
@@ -261,6 +254,7 @@ Panel {
                                             Text {
                                                 id: eventText
                                                 width: parent.width - Style.space(67)
+                                                textFormat: Text.PlainText
                                                 text: modelData.title + (modelData.location ? "\n" + modelData.location : "")
                                                 color: root.contentForeground
                                                 font.family: Style.font.family
