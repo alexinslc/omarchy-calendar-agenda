@@ -26,7 +26,19 @@ removed.
   HTTPS.
 - No shell execution, arbitrary URL fetching, dynamic code loading, or
   elevated privileges.
+- The helper may invoke `secret-tool` only with an argument list and token
+  input on stdin; it never uses `shell=True`. OAuth and API URLs are fixed
+  constants, and the only non-HTTPS URL is the 127.0.0.1 callback.
+- The cache path is
+  `~/.local/state/omarchy/calendar-agenda/events.json`; its parent directory
+  is mode `0700` and the file is mode `0600`, replaced with `os.replace` after
+  flush and `fsync`.
+
+The configuration file is
+`~/.config/omarchy/calendar-agenda/config.json` and contains only a Google
+OAuth client ID plus local account IDs. The client ID is not a secret. The
+helper currently performs an explicit one-shot sync; a 15-minute scheduler and
+QML cache consumption are intentionally deferred.
 
 Marketplace verification is an additional provenance check, not a substitute
 for source review or a complete security audit.
-

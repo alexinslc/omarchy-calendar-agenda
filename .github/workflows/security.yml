@@ -26,9 +26,14 @@ jobs:
           if grep -RInE \
             --exclude-dir=.git \
             --exclude='security.yml' \
-            '(shell\s*:\s*true|eval\s*\(|exec\s*\(|Qt\.create|Quickshell\.exec|Process\s*\{|system\s*\(|subprocess|os\.system|os\.popen|requests\.|http://)' \
+            '(shell\s*[:=]\s*true|eval\s*\(|exec\s*\(|__import__\s*\(|Qt\.create|Quickshell\.exec|Process\s*\{|system\s*\(|os\.system|os\.popen|requests\.|importlib\.)' \
             .; then
             echo "Forbidden capability pattern detected. Review explicitly before merging."
+            exit 1
+          fi
+          if grep -RInE --exclude-dir=.git --exclude='security.yml' 'http://' . \
+            | grep -vE 'http://127\.0\.0\.1:'; then
+            echo "Non-loopback HTTP endpoint detected."
             exit 1
           fi
 
@@ -49,15 +54,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          files="$(find sync -type f -name '*.py' -print 2>/dev/null || true)"
-          if [ -z "$files" ]; then
-            exit 0
-          fi
-          if grep -HnE '^[[:space:]]*(from|import)[[:space:]]+' $files \
-            | grep -vE ' (argparse|base64|calendar|datetime|hashlib|http|json|logging|os| pathlib|secrets|ssl|subprocess|sys|tempfile|time|typing|urllib|uuid|zoneinfo)(\.|[[:space:]]|$)'; then
-            echo "Non-standard Python import detected."
-            exit 1
-          fi
+          python3 - <<'PY'
+          import ast
+          import pathlib
+          import sys
+          import sysconfig
+
+          stdlib = set(getattr(sys, "stdlib_module_names", ()))
+          stdlib.add(pathlib.Path(sysconfig.get_paths()["stdlib"]).name)
+          failures = []
+          for path in pathlib.Path("sync").rglob("*.py"):
+              tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      names = [alias.name.split(".", 1)[0] for alias in node.names]
+                  elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                      names = [node.module.split(".", 1)[0]]
+                  else:
+                      continue
+                  for name in names:
+                      if name not in stdlib:
+                          failures.append(f"{path}: {name}")
+          if failures:
+              print("Non-standard Python import(s):")
+              print("\n".join(failures))
+              raise SystemExit(1)
+          PY
 
       - name: Validate archive safety
         shell: bash
@@ -71,3 +93,15 @@ jobs:
             echo "Unexpectedly large tracked file detected."
             exit 1
           fi
+
+  python-tests:
+    name: Python sync tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run standard-library unit tests
+        run: python3 -m unittest discover -s tests -v
