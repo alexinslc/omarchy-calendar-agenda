@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.alexinslc.calendar-agenda",
+  "name": "Calendar Agenda",
+  "version": "0.1.0",
+  "author": "Alex Inslee",
+  "description": "A lightweight local calendar agenda for the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "AgendaBarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Calendar agenda",
+    "description": "Local fixture-backed day, week, and month agenda views.",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {},
+    "schema": []
+  }
+}
