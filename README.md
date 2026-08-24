@@ -3,9 +3,10 @@
 A lightweight, agenda-focused Google Calendar widget for Omarchy.
 
 This project is in prototype development. The current prototype provides a
-top-right bar icon with compact day, week, and month agenda views backed by
-fixture data. Google Calendar integration is planned and will use read-only
-OAuth with support for multiple accounts and calendars.
+top-right bar icon with compact day, week, and month agenda views. It reads normalized events from the private Google
+sync cache and reports an actionable error when no valid cache is available.
+Google access uses read-only OAuth with support for multiple accounts and
+calendars.
 
 ## Security model
 
@@ -57,9 +58,13 @@ Add the widget to the top-right of the bar in
 ```
 
 The `defaultSection` in `manifest.json` is `right`; `shell.json` remains the
-source of truth and can move the widget to another section. The popup remains fixture-backed; the sync helper does not change the QML UI
-yet. Google Calendar synchronization is a one-shot command for now; periodic
-15-minute scheduling will be added in a later phase.
+source of truth and can move the widget to another section. The popup reads the
+sync cache at
+`~/.local/state/omarchy/calendar-agenda/events.json`, reloads it when the
+file changes, and checks for updates while the shell is running. If no cache
+exists or contains invalid data, it shows an error instead of presenting
+misleading fixture events. Google Calendar synchronization is a one-shot
+command for now; periodic 15-minute scheduling will be added in a later phase.
 
 ## Google sync foundation
 
