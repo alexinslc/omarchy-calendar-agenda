@@ -2,10 +2,10 @@
 
 A lightweight, agenda-focused Google Calendar widget for Omarchy.
 
-This project is in prototype development. It is intended to provide a
-top-right bar icon with compact day, week, and month agenda views. The first
-Google integration will use read-only OAuth and support multiple accounts and
-calendars.
+This project is in prototype development. The current prototype provides a
+top-right bar icon with compact day, week, and month agenda views backed by
+fixture data. Google Calendar integration is planned and will use read-only
+OAuth with support for multiple accounts and calendars.
 
 ## Security model
 
@@ -57,10 +57,9 @@ Add the widget to the top-right of the bar in
 ```
 
 The `defaultSection` in `manifest.json` is `right`; `shell.json` remains the
-source of truth and can move the widget to another section. The popup is
-fixture-backed only. Edit `fixtures/events.json` and reload the shell to try
-different events. Google OAuth, networking, event links, and cache syncing are
-intentionally out of scope for this prototype.
+source of truth and can move the widget to another section. The popup is fixture-backed only. Edit `fixtures/events.json` and reload the
+shell to try different events. Google OAuth, networking, event links, and cache
+syncing are planned but intentionally not implemented in this prototype.
 
 If a local Quickshell runtime is available, model checks can be run with:
 

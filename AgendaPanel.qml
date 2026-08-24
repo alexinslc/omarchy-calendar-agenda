@@ -25,7 +25,17 @@ Panel {
     readonly property string title: AgendaModel.viewTitle(viewMode, anchorDate)
 
     function loadEvents(text) {
-        root.events = AgendaModel.parseEvents(JSON.parse(text))
+        var data
+        try {
+            data = JSON.parse(text)
+        } catch (error) {
+            if (error && error.name === "SyntaxError") {
+                console.error("calendar fixture contains invalid JSON:", error.message)
+                return
+            }
+            throw error
+        }
+        root.events = AgendaModel.parseEvents(data)
         rebuild()
     }
 
