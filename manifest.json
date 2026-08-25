@@ -4,7 +4,7 @@
   "name": "Calendar Agenda",
   "version": "0.2.0",
   "author": "Alex Inslee",
-  "description": "A lightweight local calendar agenda for the Omarchy bar.",
+  "description": "A private, read-only Google Calendar agenda with guided account setup.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Calendar agenda",
-    "description": "Private cache-backed day, week, and month Google Calendar agenda views.",
+    "description": "Connect Google accounts and browse private day, week, and month agenda views.",
     "category": "Productivity",
     "aliases": ["calendar", "agenda", "google-calendar"],
     "allowMultiple": false,

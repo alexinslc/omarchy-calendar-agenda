@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=%h/.config/omarchy/plugins/io.github.alexinslc.calendar-agenda
-ExecStart=/usr/bin/python3 -m sync.cli --sync
+ExecStart=/usr/bin/python3 %h/.config/omarchy/plugins/io.github.alexinslc.calendar-agenda/calendar_agenda.py --sync
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
@@ -19,4 +19,3 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-

@@ -12,6 +12,7 @@ from typing import Any
 DEFAULT_CONFIG_PATH = (
     Path.home() / ".config" / "omarchy" / "calendar-agenda" / "config.json"
 )
+DEFAULT_BUNDLED_CONFIG_PATH = Path(__file__).resolve().parents[1] / "oauth-client.json"
 ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 GOOGLE_CLIENT_ID_RE = re.compile(r"^[^/\s]+\.apps\.googleusercontent\.com$")
 
@@ -33,16 +34,30 @@ def _object(value: Any, name: str) -> dict[str, Any]:
     return value
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> GoogleConfig:
+def config_path() -> Path:
+    """Prefer a private override, falling back to the bundled desktop client."""
+    if DEFAULT_CONFIG_PATH.is_file():
+        return DEFAULT_CONFIG_PATH
+    return DEFAULT_BUNDLED_CONFIG_PATH
+
+
+def load_config(path: Path | None = None) -> GoogleConfig:
     """Load the documented JSON config without accepting unknown shapes."""
+    selected_path = Path(path) if path is not None else config_path()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(selected_path.read_text(encoding="utf-8"))
     except FileNotFoundError as error:
-        raise ConfigError(f"configuration file not found: {path}") from error
+        raise ConfigError(
+            "Google connection is unavailable in this build; install a bundled "
+            "OAuth client or create the documented private override at "
+            f"{DEFAULT_CONFIG_PATH}"
+        ) from error
     except json.JSONDecodeError as error:
-        raise ConfigError(f"configuration is not valid JSON: {path}") from error
+        raise ConfigError(
+            f"configuration is not valid JSON: {selected_path}"
+        ) from error
     except OSError as error:
-        raise ConfigError(f"cannot read configuration: {path}") from error
+        raise ConfigError(f"cannot read configuration: {selected_path}") from error
 
     root = _object(raw, "configuration")
     google = _object(root.get("google"), "google")
@@ -59,9 +74,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> GoogleConfig:
             "in .apps.googleusercontent.com"
         )
 
-    client_secret = google.get("client_secret")
-    if not isinstance(client_secret, str) or not client_secret.strip():
-        raise ConfigError("google.client_secret must be a non-empty string")
+    client_secret = google.get("client_secret", "")
+    if not isinstance(client_secret, str):
+        raise ConfigError("google.client_secret must be a string when provided")
 
     accounts_value = google.get("accounts", [])
     if not isinstance(accounts_value, list):

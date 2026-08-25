@@ -1,15 +1,17 @@
-"""Command-line entry point for one-shot Google Calendar synchronization."""
+"""Command-line entry point for onboarding and Google Calendar sync."""
 
 from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
+import json
 import logging
-import sys
 from pathlib import Path
+import shutil
+import sys
 
-from .cache import write_events
-from .config import ConfigError, load_config
+from .cache import DEFAULT_CACHE_PATH, purge_account, write_events
+from .config import ConfigError, GoogleConfig, load_config
 from .google import (
     GoogleCalendarClient,
     GoogleError,
@@ -18,65 +20,108 @@ from .google import (
     normalize_event,
     refresh_access_token,
     revoke_token,
+    user_info,
 )
+from .registry import (
+    DEFAULT_REGISTRY_PATH,
+    Account,
+    RegistryError,
+    add_account,
+    load_accounts,
+    migrate_legacy_accounts,
+    new_account,
+    remove_account,
+    replace_account,
+)
+from .scheduler import SchedulerError, install_timer, remove_timer
+from .status import DEFAULT_STATUS_PATH, load_sync_status, write_sync_status
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Sync Google Calendar into the agenda cache")
-    parser.add_argument("--config", type=Path, help="configuration JSON path")
-    parser.add_argument("--account", help="one configured account ID; default is all accounts")
+    parser = argparse.ArgumentParser(
+        description="Connect and synchronize Google Calendar accounts"
+    )
+    parser.add_argument("--config", type=Path, help="private OAuth configuration JSON")
+    parser.add_argument("--account", help="one connected account ID")
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="remove local access even when Google revocation is unavailable",
+    )
+    parser.add_argument("--json", action="store_true", help="emit structured output")
     actions = parser.add_mutually_exclusive_group(required=True)
-    actions.add_argument("--authorize", action="store_true", help="connect an account in a browser")
-    actions.add_argument("--sync", action="store_true", help="fetch all calendars and write the cache")
-    actions.add_argument("--disconnect", action="store_true", help="revoke and remove an account token")
+    actions.add_argument("--status", action="store_true", help="show onboarding status")
+    actions.add_argument("--doctor", action="store_true", help="check local prerequisites")
+    actions.add_argument("--add-account", action="store_true", help="connect a Google account")
+    actions.add_argument(
+        "--remove-account", metavar="ID", help="revoke and remove a connected account"
+    )
+    actions.add_argument(
+        "--reconnect-account", metavar="ID", help="replace access for a connected account"
+    )
+    actions.add_argument(
+        "--authorize",
+        action="store_true",
+        help="legacy authorization for one configured account ID",
+    )
+    actions.add_argument("--sync", action="store_true", help="refresh the local event cache")
+    actions.add_argument(
+        "--disconnect",
+        action="store_true",
+        help="legacy alias for removing --account",
+    )
     return parser
 
 
-def _accounts(config_accounts: tuple[str, ...], selected: str | None) -> tuple[str, ...]:
+def _registry_accounts(config: GoogleConfig) -> tuple[Account, ...]:
+    return migrate_legacy_accounts(config.accounts, DEFAULT_REGISTRY_PATH)
+
+
+def _selected_accounts(
+    accounts: tuple[Account, ...], selected: str | None
+) -> tuple[Account, ...]:
     if selected is None:
-        if not config_accounts:
-            raise ConfigError("google.accounts is empty; add an account ID to the config")
-        return config_accounts
-    if selected not in config_accounts:
-        raise ConfigError(f"account is not configured: {selected}")
-    return (selected,)
+        return accounts
+    matches = tuple(account for account in accounts if account.id == selected)
+    if not matches:
+        raise RegistryError(f"account is not connected: {selected}")
+    return matches
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    logging.basicConfig(level=logging.WARNING)
-    try:
-        config = load_config(args.config) if args.config else load_config()
-        accounts = _accounts(config.accounts, args.account)
-        store = SecretToolStore()
-        if args.authorize:
-            for account_id in accounts:
-                refresh_token, _ = authorize(config.client_id, config.client_secret)
-                store.save(account_id, refresh_token)
-            return 0
-        if args.disconnect:
-            for account_id in accounts:
-                token = store.load(account_id)
-                revoke_token(token)
-                store.delete(account_id)
-            return 0
+def _sync_accounts(
+    config: GoogleConfig | None,
+    accounts: tuple[Account, ...],
+    store: SecretToolStore,
+) -> dict[str, object]:
+    if accounts and config is None:
+        raise ConfigError("Google OAuth configuration is required to synchronize accounts")
+    events: list[dict[str, object]] = []
+    cache_accounts: list[dict[str, object]] = []
+    cache_calendars: list[dict[str, str]] = []
+    errors: list[dict[str, str]] = []
+    health: dict[str, dict[str, object]] = {}
+    now = datetime.now(timezone.utc)
+    time_min = now.isoformat().replace("+00:00", "Z")
+    time_max = (now + timedelta(days=28)).isoformat().replace("+00:00", "Z")
 
-        events: list[dict[str, object]] = []
-        cache_accounts = [{"id": account_id} for account_id in accounts]
-        cache_calendars: list[dict[str, str]] = []
-        now = datetime.now(timezone.utc)
-        time_min = now.isoformat().replace("+00:00", "Z")
-        time_max = (now + timedelta(days=28)).isoformat().replace(
-            "+00:00", "Z"
-        )
-        for account_id in accounts:
+    for account in accounts:
+        try:
+            assert config is not None
             token = refresh_access_token(
                 config.client_id,
                 config.client_secret,
-                store.load(account_id),
+                store.load(account.id),
             )
             client = GoogleCalendarClient(token.access_token)
-            for calendar in client.list_calendars():
+            calendars = client.list_calendars()
+            cache_accounts.append(
+                {
+                    "id": account.id,
+                    "email": account.email,
+                    "displayName": account.display_name,
+                }
+            )
+            for calendar in calendars:
                 calendar_id = calendar.get("id")
                 if not isinstance(calendar_id, str) or not calendar_id:
                     raise GoogleError("Google calendar list contained an invalid calendar ID")
@@ -88,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                     calendar_color = ""
                 cache_calendars.append(
                     {
-                        "accountId": account_id,
+                        "accountId": account.id,
                         "id": calendar_id,
                         "name": calendar_name,
                         "color": calendar_color,
@@ -101,26 +146,267 @@ def main(argv: list[str] | None = None) -> int:
                 ):
                     normalized = normalize_event(
                         event,
-                        account_id=account_id,
+                        account_id=account.id,
                         calendar_id=calendar_id,
                         calendar_name=calendar_name,
                         calendar_color=calendar_color,
                     )
                     if normalized is not None:
                         events.append(normalized)
+            health[account.id] = {"ok": True, "error": ""}
+        except GoogleError as error:
+            errors.append({"accountId": account.id, "message": str(error)})
+            health[account.id] = {"ok": False, "error": str(error)}
+
+    if not accounts or cache_accounts:
         write_events(
             events,
-            generated_at=(
-                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            ),
+            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             range_start=time_min,
             range_end=time_max,
             accounts=cache_accounts,
             calendars=cache_calendars,
         )
-        return 0
-    except (ConfigError, GoogleError) as error:
-        print(f"calendar sync failed: {error}", file=sys.stderr)
+    write_sync_status(health, DEFAULT_STATUS_PATH)
+    return {
+        "ok": not errors,
+        "eventCount": len(events),
+        "accountCount": len(cache_accounts),
+        "calendarCount": len(cache_calendars),
+        "errors": errors,
+    }
+
+
+def _status(config_error: str = "") -> dict[str, object]:
+    accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    health = load_sync_status(DEFAULT_STATUS_PATH)
+    public_accounts = []
+    for account in accounts:
+        value = account.public_dict()
+        account_health = health.get(account.id, {})
+        value["state"] = (
+            "needs-attention" if account_health.get("ok") is False else "connected"
+        )
+        value["lastError"] = str(account_health.get("error", ""))
+        public_accounts.append(value)
+    return {
+        "ok": not config_error,
+        "configured": not config_error,
+        "configurationError": config_error,
+        "secretServiceAvailable": shutil.which("secret-tool") is not None,
+        "accounts": public_accounts,
+        "cacheAvailable": DEFAULT_CACHE_PATH.is_file(),
+    }
+
+
+def _connect_account(config: GoogleConfig, store: SecretToolStore) -> dict[str, object]:
+    refresh_token, access_token = authorize(config.client_id, config.client_secret)
+    identity = user_info(access_token.access_token)
+    account = new_account(identity["sub"], identity["email"], identity["name"])
+    if any(
+        existing.provider_subject == account.provider_subject
+        for existing in load_accounts(DEFAULT_REGISTRY_PATH)
+    ):
+        raise RegistryError(f"Google account is already connected: {account.email}")
+    store.save(account.id, refresh_token)
+    try:
+        add_account(account, DEFAULT_REGISTRY_PATH)
+    except Exception:
+        try:
+            store.delete(account.id)
+        except GoogleError:
+            pass
+        raise
+    warnings: list[str] = []
+    try:
+        install_timer()
+    except SchedulerError as error:
+        warnings.append(f"background sync could not be enabled: {error}")
+    sync_result = _sync_accounts(config, load_accounts(DEFAULT_REGISTRY_PATH), store)
+    if not sync_result["ok"]:
+        warnings.append("account connected, but the first calendar sync failed")
+    return {
+        "ok": True,
+        "message": f"Connected {account.email}",
+        "account": account.public_dict(),
+        "warnings": warnings,
+        "sync": sync_result,
+    }
+
+
+def _reconnect_account(
+    account_id: str, config: GoogleConfig, store: SecretToolStore
+) -> dict[str, object]:
+    accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    existing = next((account for account in accounts if account.id == account_id), None)
+    if existing is None:
+        raise RegistryError(f"account is not connected: {account_id}")
+    refresh_token, access_token = authorize(config.client_id, config.client_secret)
+    identity = user_info(access_token.access_token)
+    replacement = Account(
+        id=existing.id,
+        provider_subject=identity["sub"],
+        email=identity["email"],
+        display_name=identity["name"],
+    )
+    try:
+        previous_token = store.load(existing.id)
+    except GoogleError:
+        previous_token = ""
+    store.save(existing.id, refresh_token)
+    try:
+        replace_account(replacement, DEFAULT_REGISTRY_PATH)
+    except Exception:
+        if previous_token:
+            store.save(existing.id, previous_token)
+        else:
+            try:
+                store.delete(existing.id)
+            except GoogleError:
+                pass
+        raise
+    result = _sync_accounts(config, load_accounts(DEFAULT_REGISTRY_PATH), store)
+    return {
+        "ok": bool(result["ok"]),
+        "message": f"Reconnected {replacement.email}",
+        "account": replacement.public_dict(),
+        "sync": result,
+    }
+
+
+def _remove_connected_account(
+    account_id: str,
+    config: GoogleConfig | None,
+    store: SecretToolStore,
+    *,
+    local_only: bool,
+) -> dict[str, object]:
+    accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    existing = next((account for account in accounts if account.id == account_id), None)
+    if existing is None:
+        raise RegistryError(f"account is not connected: {account_id}")
+    if not local_only:
+        revoke_token(store.load(account_id))
+    try:
+        store.delete(account_id)
+    except GoogleError:
+        if not local_only:
+            raise
+    removed = remove_account(account_id, DEFAULT_REGISTRY_PATH)
+    purge_account(account_id)
+    remaining = load_accounts(DEFAULT_REGISTRY_PATH)
+    warnings: list[str] = []
+    if remaining and config is not None:
+        result = _sync_accounts(config, remaining, store)
+        if not result["ok"]:
+            warnings.append("account removed, but remaining accounts did not fully sync")
+    elif not remaining:
+        result = _sync_accounts(config, (), store)
+        try:
+            remove_timer()
+        except SchedulerError as error:
+            warnings.append(f"background sync could not be disabled: {error}")
+    else:
+        result = {"ok": False, "errors": []}
+        warnings.append(
+            "account removed; remaining accounts will sync after OAuth configuration is repaired"
+        )
+    return {
+        "ok": True,
+        "message": f"Removed {removed.email or removed.display_name}",
+        "localOnly": local_only,
+        "warnings": warnings,
+        "sync": result,
+    }
+
+
+def _emit(payload: dict[str, object], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+        return
+    message = payload.get("message")
+    if isinstance(message, str) and message:
+        print(message)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    logging.basicConfig(level=logging.WARNING)
+    structured = bool(
+        args.json
+        or args.status
+        or args.doctor
+        or args.add_account
+        or args.remove_account
+        or args.reconnect_account
+    )
+    try:
+        if args.status or args.doctor:
+            try:
+                config = load_config(args.config)
+                _registry_accounts(config)
+                config_error = ""
+            except ConfigError as error:
+                config_error = str(error)
+            payload = _status(config_error)
+            _emit(payload, json_output=True)
+            return 0 if payload["ok"] else 1
+
+        store = SecretToolStore()
+        if args.remove_account or args.disconnect:
+            try:
+                config = load_config(args.config)
+                accounts = _registry_accounts(config)
+            except ConfigError:
+                config = None
+                accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+        else:
+            config = load_config(args.config)
+            accounts = _registry_accounts(config)
+        if args.add_account:
+            assert config is not None
+            payload = _connect_account(config, store)
+        elif args.reconnect_account:
+            assert config is not None
+            payload = _reconnect_account(args.reconnect_account, config, store)
+        elif args.remove_account:
+            payload = _remove_connected_account(
+                args.remove_account,
+                config,
+                store,
+                local_only=args.local_only,
+            )
+        elif args.authorize:
+            assert config is not None
+            selected = _selected_accounts(accounts, args.account)
+            if not selected:
+                raise RegistryError("no account is configured for legacy authorization")
+            for account in selected:
+                refresh_token, _ = authorize(config.client_id, config.client_secret)
+                store.save(account.id, refresh_token)
+            payload = {"ok": True, "message": "Google authorization completed"}
+        elif args.disconnect:
+            if not args.account:
+                raise RegistryError("--disconnect requires --account")
+            payload = _remove_connected_account(
+                args.account, config, store, local_only=args.local_only
+            )
+        else:
+            assert config is not None
+            selected = _selected_accounts(accounts, args.account)
+            payload = _sync_accounts(config, selected, store)
+            payload["message"] = (
+                "Calendar sync completed"
+                if payload["ok"]
+                else "Calendar sync completed with account errors"
+            )
+        _emit(payload, json_output=structured)
+        return 0 if payload.get("ok") else 1
+    except (ConfigError, RegistryError, GoogleError, SchedulerError) as error:
+        if structured:
+            _emit({"ok": False, "error": str(error)}, json_output=True)
+        else:
+            print(f"calendar sync failed: {error}", file=sys.stderr)
         return 1
 
 

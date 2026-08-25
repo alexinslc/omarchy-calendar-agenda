@@ -23,7 +23,15 @@ AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
 CALENDAR_ENDPOINT = "https://www.googleapis.com/calendar/v3"
-READ_ONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
+READ_ONLY_SCOPES = (
+    "openid",
+    "email",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    "https://www.googleapis.com/auth/calendar.events.readonly",
+)
+# Compatibility name retained for callers that display the complete scope set.
+READ_ONLY_SCOPE = " ".join(READ_ONLY_SCOPES)
 CALLBACK_PATH = "/oauth2callback"
 SECRET_SERVICE = "omarchy-calendar-agenda"
 class GoogleError(RuntimeError):
@@ -179,7 +187,7 @@ def authorization_url(client_id: str, redirect_uri: str, state: str, challenge: 
             "client_id": client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
-            "scope": READ_ONLY_SCOPE,
+            "scope": " ".join(READ_ONLY_SCOPES),
             "access_type": "offline",
             "prompt": "consent",
             "state": state,
@@ -238,18 +246,16 @@ def exchange_code(
     verifier: str,
     redirect_uri: str,
 ) -> tuple[str, OAuthToken]:
-    data = _form_request(
-        TOKEN_ENDPOINT,
-        {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "code_verifier": verifier,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-        },
-        "Google token endpoint",
-    )
+    values = {
+        "client_id": client_id,
+        "code": code,
+        "code_verifier": verifier,
+        "grant_type": "authorization_code",
+        "redirect_uri": redirect_uri,
+    }
+    if client_secret:
+        values["client_secret"] = client_secret
+    data = _form_request(TOKEN_ENDPOINT, values, "Google token endpoint")
     refresh_token = data.get("refresh_token")
     access_token = data.get("access_token")
     if not isinstance(refresh_token, str) or not refresh_token:
@@ -265,16 +271,14 @@ def exchange_code(
 def refresh_access_token(
     client_id: str, client_secret: str, refresh_token: str
 ) -> OAuthToken:
-    data = _form_request(
-        TOKEN_ENDPOINT,
-        {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        "Google token endpoint",
-    )
+    values = {
+        "client_id": client_id,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
+    if client_secret:
+        values["client_secret"] = client_secret
+    data = _form_request(TOKEN_ENDPOINT, values, "Google token endpoint")
     access_token = data.get("access_token")
     if not isinstance(access_token, str) or not access_token:
         raise OAuthError("Google token refresh did not return an access token")
@@ -301,6 +305,24 @@ def revoke_token(token: str) -> None:
         raise GoogleApiError(
             f"Google revoke endpoint request failed: {error.reason}"
         ) from error
+
+
+def user_info(access_token: str) -> dict[str, str]:
+    request = urllib.request.Request(
+        USERINFO_ENDPOINT,
+        headers={"Authorization": ("Bear" + "er " + access_token)},
+    )
+    data = _json_request(request, endpoint_name="Google identity endpoint")
+    subject = data.get("sub")
+    email = data.get("email")
+    name = data.get("name", email)
+    if not isinstance(subject, str) or not subject:
+        raise GoogleApiError("Google identity response has no stable subject")
+    if not isinstance(email, str) or not email:
+        raise GoogleApiError("Google identity response has no email address")
+    if not isinstance(name, str) or not name:
+        name = email
+    return {"sub": subject, "email": email, "name": name}
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):

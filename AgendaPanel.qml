@@ -34,6 +34,7 @@ Panel {
     })
     property var accountOptions: []
     property var calendarOptions: []
+    property alias onboarding: onboardingService
     readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/events.json"
     readonly property string settingsPath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/settings.json"
 
@@ -47,6 +48,10 @@ Panel {
         ? "Synced " + AgendaModel.timeLabel(cacheGeneratedAt, true)
             + "  •  Through " + AgendaModel.shortDate(cacheRangeEnd)
         : ""
+
+    onOpenedChanged: if (opened) {
+        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
 
     function loadEvents(text) {
         var data
@@ -180,6 +185,7 @@ Panel {
     }
 
     function open() {
+        onboardingService.refresh()
         cacheFile.reload()
         root.controller.show()
     }
@@ -214,6 +220,11 @@ Panel {
             root.preferencesLoaded = true
             root.rebuild()
         }
+    }
+
+    OnboardingService {
+        id: onboardingService
+        onCacheChanged: cacheFile.reload()
     }
 
     FileView {
@@ -256,16 +267,25 @@ Panel {
                 else if (text === "d" || text === "D") root.setMode("day")
                 else if (text === "w" || text === "W") root.setMode("week")
                 else if (text === "m" || text === "M") root.setMode("month")
+                else if (text === "s" || text === "S") root.settingsOpen = true
+            }
+
+            OnboardingPanel {
+                visible: onboardingService.loaded && onboardingService.accounts.length === 0
+                panel: root
+                onboarding: onboardingService
             }
 
             SettingsPanel {
-                visible: root.settingsOpen
+                visible: root.settingsOpen && onboardingService.accounts.length > 0
                 panel: root
+                onboarding: onboardingService
             }
 
             Column {
                 id: agendaColumn
                 visible: !root.settingsOpen
+                    && (!onboardingService.loaded || onboardingService.accounts.length > 0)
                 anchors.fill: parent
                 anchors.margins: Style.space(16)
                 spacing: Style.space(10)

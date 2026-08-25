@@ -23,11 +23,17 @@ class PackageTests(unittest.TestCase):
             "AgendaModel.js",
             "SettingsPanel.qml",
             "CompactToggle.qml",
+            "OnboardingService.qml",
+            "OnboardingPanel.qml",
+            "calendar_agenda.py",
             "sync/__init__.py",
             "sync/cache.py",
             "sync/cli.py",
             "sync/config.py",
             "sync/google.py",
+            "sync/registry.py",
+            "sync/scheduler.py",
+            "sync/status.py",
             "systemd/omarchy-calendar-agenda-sync.service",
             "systemd/omarchy-calendar-agenda-sync.timer",
         ):
@@ -51,7 +57,17 @@ class PackageTests(unittest.TestCase):
             "io.github.alexinslc.calendar-agenda",
             service,
         )
-        self.assertIn("ExecStart=/usr/bin/python3 -m sync.cli --sync", service)
+        self.assertIn(
+            "ExecStart=/usr/bin/python3 %h/.config/omarchy/plugins/"
+            "io.github.alexinslc.calendar-agenda/calendar_agenda.py --sync",
+            service,
+        )
+
+    def test_onboarding_uses_only_the_bundled_helper(self) -> None:
+        service = (ROOT / "OnboardingService.qml").read_text(encoding="utf-8")
+        self.assertIn('property string helperPath: Quickshell.env("HOME")', service)
+        self.assertIn('["/usr/bin/python3", root.helperPath', service)
+        self.assertEqual(service.count("Process " + "{"), 2)
 
     def test_agenda_has_one_settings_panel_and_visible_mode_selector(self) -> None:
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
