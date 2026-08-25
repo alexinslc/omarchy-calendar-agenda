@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="A private, read-only Google Calendar agenda for the Omarchy desktop.">
-    <meta name="theme-color" content="#11131a">
+    <meta name="theme-color" content="#1a1b26">
     <link rel="canonical" href="https://calendar.alexinslc.com/">
     <link rel="stylesheet" href="/styles.css">
     <title>Calendar Agenda for Omarchy</title>
@@ -14,7 +14,7 @@
       <nav class="shell" aria-label="Primary navigation">
         <a class="brand" href="/">
           <span class="mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-          Calendar Agenda
+          <span><b>OMARCHY</b> / CALENDAR AGENDA</span>
         </a>
         <div class="nav-links">
           <a href="#privacy">Data practices</a>
@@ -26,19 +26,41 @@
 
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">Built for Omarchy</p>
-        <h1>Your calendar, close at hand.</h1>
-        <p class="hero-copy">Calendar Agenda brings focused day, week, and month views to the Omarchy bar. Connect the Google accounts you choose and keep the experience read-only, local, and under your control.</p>
-        <div class="actions">
-          <a class="button primary" href="https://github.com/alexinslc/omarchy-calendar-agenda#installation">Install from GitHub</a>
-          <a class="button" href="/privacy/">Read the privacy policy</a>
+        <div class="hero-content">
+          <p class="plugin-badge"><span>OMARCHY</span> DESKTOP PLUGIN</p>
+          <h1>Your day,<br><span>at a glance.</span></h1>
+          <p class="hero-copy">Calendar Agenda puts a focused, read-only Google Calendar view directly in your Omarchy bar. Your accounts, your machine, no extra noise.</p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/alexinslc/omarchy-calendar-agenda#installation">Install plugin <span aria-hidden="true">↗</span></a>
+            <a class="button" href="/privacy/">Privacy</a>
+          </div>
+        </div>
+
+        <div class="agenda-window" aria-label="Example Calendar Agenda view">
+          <div class="window-bar">
+            <span class="window-title">omarchy/calendar-agenda</span>
+            <span class="window-status"><i></i> synced</span>
+          </div>
+          <div class="calendar-head">
+            <div>
+              <span class="calendar-kicker">MONDAY</span>
+              <strong>AUG 24</strong>
+            </div>
+            <span class="weather" aria-hidden="true">DEN · 72°</span>
+          </div>
+          <ol class="mini-agenda">
+            <li><time>09:00</time><span class="event-dot blue"></span><div><strong>Design review</strong><small>Studio · 45 min</small></div></li>
+            <li><time>11:30</time><span class="event-dot orange"></span><div><strong>Lunch with Maya</strong><small>Central Market</small></div></li>
+            <li><time>14:00</time><span class="event-dot purple"></span><div><strong>Focus block</strong><small>Project Atlas · 2 hr</small></div></li>
+          </ol>
+          <div class="window-command"><span>$</span> agenda --today <i>█</i></div>
         </div>
       </section>
 
       <section class="trust-strip" aria-label="Privacy summary">
-        <div><strong>Read-only</strong><span>Cannot change or delete Google Calendar data</span></div>
-        <div><strong>Local-first</strong><span>Tokens and calendar data remain on your computer</span></div>
-        <div><strong>No tracking</strong><span>No analytics, advertising, or project-operated data server</span></div>
+        <div><b>01</b><strong>Read-only</strong><span>Cannot change or delete Google Calendar data</span></div>
+        <div><b>02</b><strong>Local-first</strong><span>Tokens and calendar data remain on your computer</span></div>
+        <div><b>03</b><strong>No tracking</strong><span>No analytics, advertising, or project-operated data server</span></div>
       </section>
 
       <section class="section" aria-labelledby="how-it-works">
