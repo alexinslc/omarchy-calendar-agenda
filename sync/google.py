@@ -199,7 +199,15 @@ def _json_request(
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read()
     except urllib.error.HTTPError as error:
-        raise GoogleApiError(f"{endpoint_name} returned HTTP {error.code}") from error
+        try:
+            details = json.loads(error.read())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            details = {}
+        reason = details.get("error_description") or details.get("error")
+        suffix = f": {reason}" if isinstance(reason, str) and reason else ""
+        raise GoogleApiError(
+            f"{endpoint_name} returned HTTP {error.code}{suffix}"
+        ) from error
     except urllib.error.URLError as error:
         raise GoogleApiError(f"{endpoint_name} request failed: {error.reason}") from error
     try:
