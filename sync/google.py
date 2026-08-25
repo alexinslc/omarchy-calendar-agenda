@@ -458,7 +458,14 @@ class GoogleCalendarClient:
             seen_tokens.add(page_token)
 
 
-def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_event(
+    event: dict[str, Any],
+    *,
+    account_id: str = "",
+    calendar_id: str = "",
+    calendar_name: str = "",
+    calendar_color: str = "",
+) -> dict[str, Any] | None:
     """Map one Google event to the existing QML event JSON contract."""
     if event.get("status") == "cancelled":
         return None
@@ -494,4 +501,8 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
         "end": end_value,
         "allDay": all_day,
         "location": location,
+        "accountId": account_id,
+        "calendarId": calendar_id,
+        "calendarName": calendar_name,
+        "calendarColor": calendar_color,
     }

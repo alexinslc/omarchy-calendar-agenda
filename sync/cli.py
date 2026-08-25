@@ -73,7 +73,13 @@ def main(argv: list[str] | None = None) -> int:
                 if not isinstance(calendar_id, str) or not calendar_id:
                     raise GoogleError("Google calendar list contained an invalid calendar ID")
                 for event in client.list_events(calendar_id):
-                    normalized = normalize_event(event)
+                    normalized = normalize_event(
+                        event,
+                        account_id=account_id,
+                        calendar_id=calendar_id,
+                        calendar_name=str(calendar.get("summary", calendar_id)),
+                        calendar_color=str(calendar.get("backgroundColor", "")),
+                    )
                     if normalized is not None:
                         events.append(normalized)
         write_events(events)

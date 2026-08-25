@@ -43,6 +43,10 @@ function normalizeEvent(event) {
         start: start,
         end: event.end ? String(event.end) : "",
         location: event.location ? String(event.location) : "",
+        accountId: event.accountId ? String(event.accountId) : "",
+        calendarId: event.calendarId ? String(event.calendarId) : "",
+        calendarName: event.calendarName ? String(event.calendarName) : "",
+        calendarColor: event.calendarColor ? String(event.calendarColor) : "",
         dateKey: allDay ? start : keyForDate(date),
         timeLabel: allDay ? "ALL DAY" : timeLabel(start),
         sortTime: date.getTime()

@@ -65,6 +65,9 @@ file changes, and checks for updates while the shell is running. If no cache
 exists or contains invalid data, it shows an error instead of presenting
 misleading fixture events. Google Calendar synchronization is a one-shot
 command for now; periodic 15-minute scheduling will be added in a later phase.
+Open the panel's gear button to configure displayed event fields, account and
+calendar visibility, and the cache refresh interval. These preferences are
+stored at `~/.local/state/omarchy/calendar-agenda/settings.json`.
 
 ## Google sync foundation
 
