@@ -43,6 +43,8 @@ Flickable {
                 onClicked: panel.settingsOpen = false
             }
         }
+}
+}
     }
 
         Text {
@@ -182,3 +184,4 @@ Flickable {
             }
         }
     }
+}
