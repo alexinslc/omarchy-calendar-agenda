@@ -1,0 +1,22 @@
+[Unit]
+Description=Synchronize the Omarchy Calendar Agenda cache
+Documentation=https://github.com/alexinslc/omarchy-calendar-agenda
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.config/omarchy/plugins/io.github.alexinslc.calendar-agenda
+ExecStart=/usr/bin/python3 -m sync.cli --sync
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=-%h/.local/state/omarchy/calendar-agenda
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+

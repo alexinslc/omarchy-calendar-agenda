@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QQC2
 import qs.Commons
 import qs.Ui
 
@@ -12,6 +13,9 @@ Flickable {
     contentHeight: contentColumn.implicitHeight
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+    flickableDirection: Flickable.VerticalFlick
+    interactive: contentHeight > height
+    QQC2.ScrollBar.vertical: QQC2.ScrollBar { policy: QQC2.ScrollBar.AsNeeded }
 
     function toggleField(key) {
         var updated = Object.assign({}, panel.preferences)
@@ -107,12 +111,13 @@ Flickable {
             model: panel.calendarOptions
             delegate: CompactToggle {
                 required property var modelData
+                readonly property string preferenceKey: modelData.accountId + "::" + modelData.id
                 width: root.width
-                label: modelData.name
-                checked: panel.enabled(panel.preferences.calendars, modelData.id)
+                label: modelData.name + "  ·  " + modelData.accountId
+                checked: panel.calendarEnabledFor(modelData.accountId, modelData.id)
                 onClicked: {
                     var calendars = Object.assign({}, panel.preferences.calendars)
-                    calendars[modelData.id] = !panel.enabled(calendars, modelData.id)
+                    calendars[preferenceKey] = !panel.calendarEnabledFor(modelData.accountId, modelData.id)
                     panel.preferences = Object.assign({}, panel.preferences, { "calendars": calendars })
                     panel.savePreferences()
                     panel.rebuild()
@@ -135,10 +140,10 @@ Flickable {
                 required property string modelData
                 width: root.width
                 label: modelData
-                checked: panel.enabled(panel.preferences.accounts, modelData)
+                checked: panel.preferenceEnabled(panel.preferences.accounts, modelData)
                 onClicked: {
                     var accounts = Object.assign({}, panel.preferences.accounts)
-                    accounts[modelData] = !panel.enabled(accounts, modelData)
+                    accounts[modelData] = !panel.preferenceEnabled(accounts, modelData)
                     panel.preferences = Object.assign({}, panel.preferences, { "accounts": accounts })
                     panel.savePreferences()
                     panel.rebuild()
@@ -146,25 +151,5 @@ Flickable {
             }
         }
 
-        Text {
-            text: "SYNC EVERY"
-            color: panel.accentForeground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            font.letterSpacing: 1.2
-        }
-
-        ButtonGroup {
-            width: root.width
-            options: ["15 minutes", "30 minutes"]
-            value: panel.preferences.refreshMinutes === 30 ? "30 minutes" : "15 minutes"
-            onChanged: function(value) {
-                var updated = Object.assign({}, panel.preferences)
-                updated.refreshMinutes = value === "30 minutes" ? 30 : 15
-                panel.preferences = updated
-                panel.savePreferences()
-            }
-        }
     }
 }

@@ -62,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         events: list[dict[str, object]] = []
+        cache_accounts = [{"id": account_id} for account_id in accounts]
+        cache_calendars: list[dict[str, str]] = []
         now = datetime.now(timezone.utc)
         time_min = now.isoformat().replace("+00:00", "Z")
         time_max = (now + timedelta(days=28)).isoformat().replace(
@@ -78,6 +80,20 @@ def main(argv: list[str] | None = None) -> int:
                 calendar_id = calendar.get("id")
                 if not isinstance(calendar_id, str) or not calendar_id:
                     raise GoogleError("Google calendar list contained an invalid calendar ID")
+                calendar_name = calendar.get("summary", calendar_id)
+                if not isinstance(calendar_name, str) or not calendar_name:
+                    calendar_name = calendar_id
+                calendar_color = calendar.get("backgroundColor", "")
+                if not isinstance(calendar_color, str):
+                    calendar_color = ""
+                cache_calendars.append(
+                    {
+                        "accountId": account_id,
+                        "id": calendar_id,
+                        "name": calendar_name,
+                        "color": calendar_color,
+                    }
+                )
                 for event in client.list_events(
                     calendar_id,
                     time_min=time_min,
@@ -87,12 +103,21 @@ def main(argv: list[str] | None = None) -> int:
                         event,
                         account_id=account_id,
                         calendar_id=calendar_id,
-                        calendar_name=str(calendar.get("summary", calendar_id)),
-                        calendar_color=str(calendar.get("backgroundColor", "")),
+                        calendar_name=calendar_name,
+                        calendar_color=calendar_color,
                     )
                     if normalized is not None:
                         events.append(normalized)
-        write_events(events)
+        write_events(
+            events,
+            generated_at=(
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            ),
+            range_start=time_min,
+            range_end=time_max,
+            accounts=cache_accounts,
+            calendars=cache_calendars,
+        )
         return 0
     except (ConfigError, GoogleError) as error:
         print(f"calendar sync failed: {error}", file=sys.stderr)

@@ -16,7 +16,9 @@ function keyForDate(date) {
 
 function dateForKey(key) {
     var parts = String(key).split("-")
-    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    if (parts.length !== 3) return new Date(NaN)
+    var date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    return keyForDate(date) === String(key) ? date : new Date(NaN)
 }
 
 function dateOnlyKey(value) {
@@ -94,6 +96,93 @@ function parseEvents(data) {
         }
     }
     return result
+}
+
+function parseCache(data) {
+    if (!data || typeof data !== "object" || data instanceof Array)
+        throw new Error("cache root must be an object")
+    if (data.schemaVersion !== 1)
+        throw new Error("cache schema version is unsupported")
+    if (!(data.events instanceof Array))
+        throw new Error("cache events must be an array")
+    if (!(data.accounts instanceof Array) || !(data.calendars instanceof Array))
+        throw new Error("cache account and calendar metadata must be arrays")
+
+    var generatedAt = new Date(data.generatedAt)
+    var rangeStart = new Date(data.rangeStart)
+    var rangeEnd = new Date(data.rangeEnd)
+    if (isNaN(generatedAt.getTime()) || isNaN(rangeStart.getTime())
+            || isNaN(rangeEnd.getTime()) || rangeEnd <= rangeStart)
+        throw new Error("cache timestamps are invalid")
+
+    var accounts = []
+    var accountIds = []
+    for (var i = 0; i < data.accounts.length; i++) {
+        var account = data.accounts[i]
+        if (!account || typeof account !== "object" || !account.id)
+            throw new Error("cache contains invalid account metadata")
+        var accountId = String(account.id)
+        if (accountIds.indexOf(accountId) !== -1)
+            throw new Error("cache contains duplicate account metadata")
+        accountIds.push(accountId)
+        accounts.push({ "id": accountId })
+    }
+
+    var calendars = []
+    var calendarKeys = []
+    for (var j = 0; j < data.calendars.length; j++) {
+        var calendar = data.calendars[j]
+        if (!calendar || typeof calendar !== "object" || !calendar.accountId
+                || !calendar.id || !calendar.name)
+            throw new Error("cache contains invalid calendar metadata")
+        var key = calendarKey(calendar.accountId, calendar.id)
+        if (accountIds.indexOf(String(calendar.accountId)) === -1
+                || calendarKeys.indexOf(key) !== -1)
+            throw new Error("cache calendar metadata is inconsistent")
+        calendarKeys.push(key)
+        calendars.push({
+            "accountId": String(calendar.accountId),
+            "id": String(calendar.id),
+            "name": String(calendar.name),
+            "color": calendar.color ? String(calendar.color) : ""
+        })
+    }
+
+    for (var k = 0; k < data.events.length; k++) {
+        var rawEvent = data.events[k]
+        if (!rawEvent || typeof rawEvent !== "object"
+                || typeof rawEvent.title !== "string"
+                || typeof rawEvent.start !== "string"
+                || typeof rawEvent.end !== "string"
+                || typeof rawEvent.allDay !== "boolean"
+                || typeof rawEvent.location !== "string"
+                || typeof rawEvent.accountId !== "string"
+                || typeof rawEvent.calendarId !== "string"
+                || typeof rawEvent.calendarName !== "string"
+                || calendarKeys.indexOf(calendarKey(
+                    rawEvent.accountId, rawEvent.calendarId)) === -1
+                || !normalizeEvent(rawEvent))
+            throw new Error("cache contains an invalid event at index " + k)
+    }
+
+    return {
+        "events": parseEvents(data),
+        "accounts": accounts,
+        "calendars": calendars,
+        "generatedAt": String(data.generatedAt),
+        "rangeStart": String(data.rangeStart),
+        "rangeEnd": String(data.rangeEnd)
+    }
+}
+
+function calendarKey(accountId, calendarId) {
+    return String(accountId || "") + "::" + String(calendarId || "")
+}
+
+function shortDate(value) {
+    var date = new Date(value)
+    if (isNaN(date.getTime())) return ""
+    return MONTH_NAMES[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear()
 }
 
 function compareEvents(a, b) {
