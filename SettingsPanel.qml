@@ -173,4 +173,4 @@ Column {
             }
         }
     }
-</Column>
+}
