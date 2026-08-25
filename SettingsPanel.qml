@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Ui
 
 Flickable {
     id: root
@@ -7,7 +8,7 @@ Flickable {
     anchors.fill: parent
     anchors.margins: Style.space(16)
     contentWidth: width
-    contentHeight: settingsContent.implicitHeight
+    contentHeight: contentColumn.implicitHeight
     clip: true
     boundsBehavior: Flickable.StopAtBounds
 
@@ -19,166 +20,126 @@ Flickable {
     }
 
     Column {
-        id: settingsContent
+        id: contentColumn
         width: root.width
         spacing: Style.space(10)
 
         Row {
             width: parent.width
+            height: Style.space(34)
             spacing: Style.space(8)
-        Text {
-            text: "SETTINGS"
-            color: panel.contentForeground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            font.bold: true
-        }
-        Text {
-            text: "Done"
-            width: parent.width - Style.space(70)
-            color: panel.accentForeground
-            horizontalAlignment: Text.AlignRight
-            MouseArea {
-                anchors.fill: parent
-                onClicked: panel.settingsOpen = false
+
+            Text {
+                text: "SETTINGS"
+                color: panel.contentForeground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.title
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
             }
-}
-    }
+
+            Text {
+                text: "DONE"
+                width: parent.width - Style.space(80)
+                color: panel.accentForeground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                horizontalAlignment: Text.AlignRight
+                anchors.verticalCenter: parent.verticalCenter
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: panel.settingsOpen = false
+                }
+            }
+        }
 
         Text {
             text: "DISPLAY"
             color: panel.accentForeground
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.caption
             font.bold: true
+            font.letterSpacing: 1.2
         }
 
         Repeater {
             model: [
-                { "key": "showTime", "label": "Show event times" },
-                { "key": "showCalendar", "label": "Show calendar names" },
-                { "key": "showLocation", "label": "Show locations" }
+                { "key": "showTime", "label": "Event times" },
+                { "key": "showCalendar", "label": "Calendar names" },
+                { "key": "showLocation", "label": "Locations" }
             ]
-            delegate: Rectangle {
-            required property var modelData
-            width: parent.width
-            height: Style.space(30)
-            color: "transparent"
-            Text {
-                text: modelData.label
-                color: panel.contentForeground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                anchors.verticalCenter: parent.verticalCenter
+            delegate: Toggle {
+                required property var modelData
+                width: root.width
+                label: modelData.label
+                checked: panel.preferences[modelData.key]
+                onClicked: root.toggleField(modelData.key)
             }
-            Text {
-                text: panel.preferences[modelData.key] ? "ON" : "OFF"
-                color: panel.preferences[modelData.key] ? panel.accentForeground : panel.mutedForeground
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: root.toggleField(modelData.key)
-                    }
-                }
         }
-    }
 
         Text {
             text: "CALENDARS"
             color: panel.accentForeground
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.caption
             font.bold: true
+            font.letterSpacing: 1.2
         }
 
         Repeater {
             model: panel.calendarOptions
-            delegate: Rectangle {
-            required property var modelData
-            width: parent.width
-            height: Style.space(30)
-            color: "transparent"
-            Text {
-                text: modelData.name
-                color: panel.contentForeground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            Text {
-                text: panel.enabled(panel.preferences.calendars, modelData.id) ? "ON" : "OFF"
-                color: panel.enabled(panel.preferences.calendars, modelData.id) ? panel.accentForeground : panel.mutedForeground
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        var calendars = Object.assign({}, panel.preferences.calendars)
-                        calendars[modelData.id] = !panel.enabled(calendars, modelData.id)
-                        panel.preferences = Object.assign({}, panel.preferences, { "calendars": calendars })
-                        panel.savePreferences()
-                        panel.rebuild()
-                        }
-                    }
+            delegate: Toggle {
+                required property var modelData
+                width: root.width
+                label: modelData.name
+                checked: panel.enabled(panel.preferences.calendars, modelData.id)
+                onClicked: {
+                    var calendars = Object.assign({}, panel.preferences.calendars)
+                    calendars[modelData.id] = !panel.enabled(calendars, modelData.id)
+                    panel.preferences = Object.assign({}, panel.preferences, { "calendars": calendars })
+                    panel.savePreferences()
+                    panel.rebuild()
+                }
             }
         }
-    }
 
         Text {
             text: "ACCOUNTS"
             color: panel.accentForeground
             font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.caption
             font.bold: true
+            font.letterSpacing: 1.2
         }
 
         Repeater {
             model: panel.accountOptions
-            delegate: Rectangle {
-            required property string modelData
-            width: parent.width
-            height: Style.space(30)
-            color: "transparent"
-            Text {
-                text: modelData
-                color: panel.contentForeground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            Text {
-                text: panel.enabled(panel.preferences.accounts, modelData) ? "ON" : "OFF"
-                color: panel.enabled(panel.preferences.accounts, modelData) ? panel.accentForeground : panel.mutedForeground
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        var accounts = Object.assign({}, panel.preferences.accounts)
-                        accounts[modelData] = !panel.enabled(accounts, modelData)
-                        panel.preferences = Object.assign({}, panel.preferences, { "accounts": accounts })
-                        panel.savePreferences()
-                        panel.rebuild()
-                        }
-                    }
+            delegate: Toggle {
+                required property string modelData
+                width: root.width
+                label: modelData
+                checked: panel.enabled(panel.preferences.accounts, modelData)
+                onClicked: {
+                    var accounts = Object.assign({}, panel.preferences.accounts)
+                    accounts[modelData] = !panel.enabled(accounts, modelData)
+                    panel.preferences = Object.assign({}, panel.preferences, { "accounts": accounts })
+                    panel.savePreferences()
+                    panel.rebuild()
+                }
             }
         }
-    }
 
-        Text {
-            text: "REFRESH: " + panel.preferences.refreshMinutes + " MIN (CLICK TO TOGGLE 15/30)"
-            color: panel.contentForeground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    var updated = Object.assign({}, panel.preferences)
-                    updated.refreshMinutes = panel.preferences.refreshMinutes === 15 ? 30 : 15
-                    panel.preferences = updated
-                    panel.savePreferences()
-                }
+        Toggle {
+            width: root.width
+            label: "Refresh interval"
+            description: "Automatically reload cached events"
+            checked: panel.preferences.refreshMinutes === 15
+            onClicked: {
+                var updated = Object.assign({}, panel.preferences)
+                updated.refreshMinutes = panel.preferences.refreshMinutes === 15 ? 30 : 15
+                panel.preferences = updated
+                panel.savePreferences()
             }
         }
     }
