@@ -12,6 +12,7 @@ permissions:
 jobs:
   static-security:
     name: Static security checks
+    needs: [python-tests, qml-model-tests]
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
@@ -105,3 +106,46 @@ jobs:
 
       - name: Run standard-library unit tests
         run: python3 -m unittest discover -s tests -v
+
+  qml-model-tests:
+    name: QML model tests
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Install Quickshell
+        run: pacman -Syu --noconfirm quickshell git
+
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run QML model checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output=$(timeout 6s env QT_QPA_PLATFORM=offscreen quickshell -p model_test.qml 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if grep -q "agenda model tests passed" <<<"$output"; then
+            exit 0
+          fi
+          exit "$status"
+
+      - name: Statically load QML components
+        shell: bash
+        run: |
+          set -euo pipefail
+          omarchy_source=$(mktemp -d)
+          qml_imports=$(mktemp -d)
+          git clone --quiet --depth 1 --branch v4.0.0 \
+            https://github.com/basecamp/omarchy.git "$omarchy_source"
+          test "$(git -C "$omarchy_source" rev-parse HEAD)" = \
+            "f0020448ca87329199de7cb12f2015ebc4a3e5e7"
+          mkdir -p "$qml_imports/qs"
+          ln -s "$omarchy_source/shell/Commons" "$qml_imports/qs/Commons"
+          ln -s "$omarchy_source/shell/Ui" "$qml_imports/qs/Ui"
+          /usr/lib/qt6/bin/qmllint -I "$qml_imports" \
+            AgendaBarWidget.qml AgendaPanel.qml SettingsPanel.qml CompactToggle.qml

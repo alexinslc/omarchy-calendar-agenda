@@ -1,0 +1,13 @@
+[Unit]
+Description=Synchronize the Omarchy Calendar Agenda every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=30s
+AccuracySec=1m
+Unit=omarchy-calendar-agenda-sync.service
+
+[Install]
+WantedBy=timers.target
+

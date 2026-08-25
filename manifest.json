@@ -2,19 +2,21 @@
   "schemaVersion": 1,
   "id": "io.github.alexinslc.calendar-agenda",
   "name": "Calendar Agenda",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Alex Inslee",
   "description": "A lightweight local calendar agenda for the Omarchy bar.",
   "kinds": [
     "bar-widget"
   ],
+  "activation": "on-demand",
   "entryPoints": {
     "barWidget": "AgendaBarWidget.qml"
   },
   "barWidget": {
     "displayName": "Calendar agenda",
-    "description": "Local fixture-backed day, week, and month agenda views.",
+    "description": "Private cache-backed day, week, and month Google Calendar agenda views.",
     "category": "Productivity",
+    "aliases": ["calendar", "agenda", "google-calendar"],
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {},

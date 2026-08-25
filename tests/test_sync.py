@@ -7,12 +7,14 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-from sync.cache import write_events
-from sync.config import ConfigError, load_config
+from sync.cache import CACHE_SCHEMA_VERSION, write_events
+from sync.cli import main
+from sync.config import ConfigError, GoogleConfig, load_config
 from sync.google import (
     CALENDAR_ENDPOINT,
     GoogleCalendarClient,
     OAuthError,
+    OAuthToken,
     READ_ONLY_SCOPE,
     SecretServiceError,
     SecretToolStore,
@@ -73,11 +75,29 @@ class CacheTests(unittest.TestCase):
         directory.mkdir(exist_ok=True)
         path = directory / "events.json"
         try:
-            write_events([{"title": "Planning", "start": "2026-08-24"}], path)
-            self.assertEqual(
-                json.loads(path.read_text(encoding="utf-8")),
-                {"events": [{"title": "Planning", "start": "2026-08-24"}]},
+            write_events(
+                [{"title": "Planning", "start": "2026-08-24"}],
+                path,
+                generated_at="2026-08-24T15:00:00Z",
+                range_start="2026-08-24T15:00:00Z",
+                range_end="2026-09-21T15:00:00Z",
+                accounts=[{"id": "personal"}],
+                calendars=[
+                    {
+                        "accountId": "personal",
+                        "id": "primary",
+                        "name": "Personal",
+                        "color": "#4285f4",
+                    }
+                ],
             )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schemaVersion"], CACHE_SCHEMA_VERSION)
+            self.assertEqual(payload["generatedAt"], "2026-08-24T15:00:00Z")
+            self.assertEqual(payload["rangeEnd"], "2026-09-21T15:00:00Z")
+            self.assertEqual(payload["accounts"], [{"id": "personal"}])
+            self.assertEqual(payload["calendars"][0]["name"], "Personal")
+            self.assertEqual(payload["events"][0]["title"], "Planning")
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertFalse(list(directory.glob(".events.json.*.tmp")))
         finally:
@@ -200,6 +220,55 @@ class GoogleTests(unittest.TestCase):
             urllib.parse.unquote(urllib.parse.urlsplit(captured_calls[2].full_url).path),
             "/calendar/v3/calendars/primary/events",
         )
+
+
+class CliTests(unittest.TestCase):
+    @patch("sync.cli.write_events")
+    @patch("sync.cli.GoogleCalendarClient")
+    @patch("sync.cli.refresh_access_token", return_value=OAuthToken("access-token"))
+    @patch("sync.cli.SecretToolStore")
+    @patch(
+        "sync.cli.load_config",
+        return_value=GoogleConfig(
+            client_id="test-client.apps.googleusercontent.com",
+            client_secret="client-secret",
+            accounts=("personal",),
+        ),
+    )
+    def test_sync_writes_coverage_and_calendar_metadata(
+        self,
+        _load_config,
+        store_class,
+        _refresh_access_token,
+        client_class,
+        write_events_mock,
+    ) -> None:
+        store_class.return_value.load.return_value = "refresh-token"
+        client = client_class.return_value
+        client.list_calendars.return_value = [
+            {
+                "id": "primary",
+                "summary": "Personal",
+                "backgroundColor": "#4285f4",
+            }
+        ]
+        client.list_events.return_value = [
+            {
+                "summary": "Review",
+                "start": {"dateTime": "2026-08-24T09:00:00-06:00"},
+                "end": {"dateTime": "2026-08-24T10:00:00-06:00"},
+            }
+        ]
+
+        self.assertEqual(main(["--sync"]), 0)
+
+        args, kwargs = write_events_mock.call_args
+        self.assertEqual(args[0][0]["accountId"], "personal")
+        self.assertEqual(kwargs["accounts"], [{"id": "personal"}])
+        self.assertEqual(kwargs["calendars"][0]["name"], "Personal")
+        self.assertTrue(kwargs["generated_at"].endswith("Z"))
+        self.assertTrue(kwargs["range_start"].endswith("Z"))
+        self.assertTrue(kwargs["range_end"].endswith("Z"))
 
 
 if __name__ == "__main__":

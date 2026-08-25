@@ -35,10 +35,12 @@ removed.
   flush and `fsync`.
 
 The configuration file is
-`~/.config/omarchy/calendar-agenda/config.json` and contains only a Google
-OAuth client ID plus local account IDs. The client ID is not a secret. The
-helper currently performs an explicit one-shot sync; a 15-minute scheduler and
-QML cache consumption are intentionally deferred.
+`~/.config/omarchy/calendar-agenda/config.json` and contains the Google desktop
+OAuth client ID and client secret plus local account IDs. It should be mode
+`0600`. Refresh tokens remain exclusively in Secret Service. The helper can run
+as an explicit one-shot sync or through the bundled 15-minute systemd user
+timer. QML consumes only the versioned local cache and rejects malformed,
+expired, or unsupported cache data.
 
 Marketplace verification is an additional provenance check, not a substitute
 for source review or a complete security audit.

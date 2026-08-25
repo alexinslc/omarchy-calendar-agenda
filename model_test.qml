@@ -37,6 +37,48 @@ QtObject {
                 Qt.exit(1)
                 return
         }
+        var cache = AgendaModel.parseCache({
+            schemaVersion: 1,
+            generatedAt: "2026-08-24T15:00:00Z",
+            rangeStart: "2026-08-24T15:00:00Z",
+            rangeEnd: "2026-09-21T15:00:00Z",
+            accounts: [{ id: "personal" }],
+            calendars: [{
+                accountId: "personal",
+                id: "primary",
+                name: "Personal",
+                color: "#4285f4"
+            }],
+            events: [{
+                title: "Review",
+                start: "2026-08-24T09:00:00-06:00",
+                end: "2026-08-24T10:00:00-06:00",
+                allDay: false,
+                location: "",
+                accountId: "personal",
+                calendarId: "primary",
+                calendarName: "Personal"
+            }]
+        })
+        if (cache.events.length !== 1
+                || cache.calendars.length !== 1
+                || AgendaModel.calendarKey("personal", "primary") !== "personal::primary") {
+            console.error("cache contract test failed")
+            Qt.exit(1)
+            return
+        }
+        var invalidCacheRejected = false
+        try {
+            AgendaModel.parseCache({ events: [] })
+        } catch (error) {
+            invalidCacheRejected = true
+        }
+        if (!invalidCacheRejected
+                || !isNaN(AgendaModel.dateForKey("2026-02-31").getTime())) {
+            console.error("cache validation test failed")
+            Qt.exit(1)
+            return
+        }
         console.log("agenda model tests passed")
         Qt.exit(0)
     }

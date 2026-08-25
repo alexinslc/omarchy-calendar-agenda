@@ -17,15 +17,33 @@ DEFAULT_CACHE_PATH = (
     / "calendar-agenda"
     / "events.json"
 )
+CACHE_SCHEMA_VERSION = 1
 
 
-def write_events(events: Iterable[dict[str, Any]], path: Path = DEFAULT_CACHE_PATH) -> None:
-    """Replace the cache atomically and keep it readable only by the user."""
+def write_events(
+    events: Iterable[dict[str, Any]],
+    path: Path = DEFAULT_CACHE_PATH,
+    *,
+    generated_at: str,
+    range_start: str,
+    range_end: str,
+    accounts: Iterable[dict[str, Any]],
+    calendars: Iterable[dict[str, Any]],
+) -> None:
+    """Replace the versioned cache atomically and keep it user-private."""
     destination = Path(path)
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(destination.parent, 0o700)
     payload = json.dumps(
-        {"events": list(events)},
+        {
+            "schemaVersion": CACHE_SCHEMA_VERSION,
+            "generatedAt": generated_at,
+            "rangeStart": range_start,
+            "rangeEnd": range_end,
+            "accounts": list(accounts),
+            "calendars": list(calendars),
+            "events": list(events),
+        },
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")

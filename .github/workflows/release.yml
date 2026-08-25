@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Validate tag and project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = json.loads(Path("manifest.json").read_text())["version"]
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              raise SystemExit(f"tag {tag!r} does not match manifest version {version!r}")
+          PY
+          python3 -m unittest discover -s tests -v
+
+      - name: Build source archive and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          archive="omarchy-calendar-agenda-${version}.tar.gz"
+          mkdir -p dist
+          git archive --format=tar.gz \
+            --prefix="omarchy-calendar-agenda-${version}/" \
+            -o "dist/${archive}" HEAD
+          cd dist
+          sha256sum "${archive}" > SHA256SUMS
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/omarchy-calendar-agenda.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest release artifacts
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/*.spdx.json
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+
