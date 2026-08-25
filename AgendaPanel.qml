@@ -36,6 +36,8 @@ Panel {
                 "calendar cache contains invalid JSON:",
                 error.message
             )
+            root.events = []
+            root.groups = []
             root.dataState = "error"
             root.dataMessage = "Calendar data is unavailable. Run a sync to refresh it."
             return
@@ -88,6 +90,8 @@ Panel {
         onFileChanged: reload()
         onLoaded: root.loadEvents(text())
         onLoadFailed: {
+            root.events = []
+            root.groups = []
             root.dataState = "error"
             root.dataMessage = "No calendar data is available. Run a sync to refresh it."
         }

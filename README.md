@@ -3,10 +3,10 @@
 A lightweight, agenda-focused Google Calendar widget for Omarchy.
 
 This project is in prototype development. The current prototype provides a
-top-right bar icon with compact day, week, and month agenda views. It reads normalized events from the private Google
-sync cache and reports an actionable error when no valid cache is available.
-Google access uses read-only OAuth with support for multiple accounts and
-calendars.
+top-right bar icon with compact day, week, and month agenda views. It reads
+normalized events from the private Google sync cache and reports an actionable
+error when no valid cache is available. Google access uses read-only OAuth
+with support for multiple accounts and calendars.
 
 ## Security model
 

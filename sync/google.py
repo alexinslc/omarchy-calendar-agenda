@@ -203,6 +203,8 @@ def _json_request(
             details = json.loads(error.read())
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             details = {}
+        if not isinstance(details, dict):
+            details = {}
         reason = details.get("error_description") or details.get("error")
         suffix = f": {reason}" if isinstance(reason, str) and reason else ""
         raise GoogleApiError(
