@@ -8,5 +8,8 @@ dist/
 build/
 coverage/
 .env
+.env.*
+.dev.vars
+oauth-client.json
 *.token
 *.secret

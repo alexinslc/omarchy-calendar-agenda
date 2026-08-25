@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: August 24, 2026
+Last updated: August 25, 2026
 
 Omarchy Calendar Agenda is a local desktop plugin that shows events from the
 Google calendars a user explicitly connects.
@@ -28,8 +28,12 @@ the Limited Use requirements.
 OAuth refresh tokens are stored in the user's Linux Secret Service. Account
 metadata, synchronization status, calendar metadata, and a rolling local event
 cache are stored only on the user's computer under private user permissions.
-The project does not operate a server that receives this data, and the plugin
-does not share it with the project maintainer or third parties.
+On first use and at most once per day afterward, the plugin contacts
+`calendar.alexinslc.com` to retrieve its distributable Google desktop-client
+configuration. That endpoint does not receive Google authorization codes,
+tokens, account identity, calendars, or events. The project does not operate a
+server that receives Google user data, and the plugin does not share Google
+user data with the project maintainer or third parties.
 
 ## Retention and deletion
 

@@ -17,6 +17,8 @@ security boundary.
 - Google access uses the narrow calendar-list and event read-only scopes.
 - OAuth refresh tokens are stored in the Linux Secret Service.
 - Calendar data is cached locally and written atomically.
+- Production desktop-client configuration is retrieved from one fixed HTTPS
+  endpoint and cached under private local permissions; it is never committed.
 - The sync helper will use Python's standard library only.
 - QML and helper code must not execute arbitrary shell commands, load remote
   code, or accept arbitrary network endpoints.
@@ -38,9 +40,10 @@ Google Calendar**, complete Google's consent screen in the browser, and return
 to the panel. The plugin stores the token in Secret Service, performs the first
 sync, and enables its 15-minute user timer automatically.
 
-A production release must include the project's public Google desktop OAuth
-client configuration. A source checkout without that configuration displays a
-clear unavailable message instead of starting an incomplete authorization.
+On first use, the plugin retrieves the project's distributable Google desktop
+OAuth configuration from `calendar.alexinslc.com` and caches it locally with
+mode `0600`. That endpoint receives no Google authorization codes, tokens,
+account identity, calendars, or events.
 
 See the public [Privacy Policy](https://calendar.alexinslc.com/privacy/) for how
 Google account and calendar data is used, stored, and deleted.
@@ -137,12 +140,18 @@ The account registry and per-account health record are private files at
 `sync-status.json`. Refresh tokens never appear in those files, command-line
 arguments, or logs.
 
-## OAuth configuration for development
+## OAuth configuration
 
-Release builds use a bundled `oauth-client.json` containing the project's
-public Google desktop OAuth client configuration. Developers can instead copy
-`oauth-client.example.json` to the private override below and supply a desktop
-client ID from a Google Cloud test project:
+Production OAuth client credentials are not stored in this repository or its
+release archives. The Cloudflare Worker reads them from encrypted Worker secret
+bindings and returns the distributable desktop-client configuration at the
+single fixed endpoint used by the plugin. The validated response is cached at
+`~/.local/state/omarchy/calendar-agenda/oauth-client.json`, refreshed at most
+once per day, and reused if the endpoint is temporarily unavailable.
+
+Developers can bypass the production endpoint by copying
+`oauth-client.example.json` to the private override below and supplying the
+Desktop client ID and client secret issued by a Google Cloud test project:
 
 ```bash
 mkdir -p ~/.config/omarchy/calendar-agenda
@@ -158,7 +167,13 @@ for these scopes:
 - `https://www.googleapis.com/auth/calendar.calendarlist.readonly`
 - `https://www.googleapis.com/auth/calendar.events.readonly`
 
-The optional `client_secret` may be left empty for a public desktop client.
+Desktop applications are public OAuth clients and cannot keep distributed
+client configuration confidential. Keeping that configuration outside Git
+prevents accidental reuse by forks and keeps repository secret scanning
+effective; it does not claim the value is inaccessible to an installed client.
+Use the exact `client_id` and `client_secret` issued together for a private
+development override. PKCE protects each authorization-code exchange
+independently.
 Older private configurations with an `accounts` list are migrated into the
 account registry; those accounts are labeled for a one-time reconnect.
 
@@ -172,11 +187,13 @@ calendar metadata, and normalized events. It is written atomically, with mode
 `0600`, at:
 `~/.local/state/omarchy/calendar-agenda/events.json`
 
-Data flow is: config → browser OAuth → Secret Service refresh token → fixed
-Google HTTPS endpoints → normalized in-memory events → atomic cache write.
-Tokens never appear in command-line arguments, logs, or files. Tests mock
-browser, Secret Service, and HTTP boundaries; they never require credentials or
-make network calls.
+Data flow is: fixed configuration endpoint → private local configuration cache
+→ browser OAuth → Secret Service refresh token → fixed Google HTTPS endpoints
+→ normalized in-memory events → atomic cache write. Only the distributable
+desktop-client configuration is retrieved from the project endpoint; Google
+user data and tokens never pass through it. Tokens never appear in command-line
+arguments, logs, or files. Tests mock browser, Secret Service, and HTTP
+boundaries; they never require credentials or make network calls.
 
 If a local Quickshell runtime is available, model checks can be run with:
 
@@ -197,9 +214,10 @@ python3 -m unittest discover -s tests -v
 ## Public website
 
 The OAuth homepage, privacy policy, and terms are plain static files in
-`site/`. They are deployed to `https://calendar.alexinslc.com` with Cloudflare
-Workers Static Assets; Wrangler creates the custom-domain DNS record and TLS
-certificate.
+`site/`. A small Worker serves the fixed production desktop-client
+configuration endpoint from encrypted secret bindings and delegates every
+other request to Cloudflare Workers Static Assets. Wrangler creates the
+custom-domain DNS record and TLS certificate.
 
 Omarchy supplies Node.js and npx through mise. Preview or deploy with a pinned
 Wrangler version that runs from npm's external cache rather than adding a
@@ -210,8 +228,10 @@ WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 dev
 WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 deploy
 ```
 
-No framework, analytics, server-side code, Cloudflare Tunnel, project-local
-dependency tree, or global npm package is used.
+No framework, analytics, Cloudflare Tunnel, project-local dependency tree, or
+global npm package is used. Configure `GOOGLE_OAUTH_CLIENT_ID` and
+`GOOGLE_OAUTH_CLIENT_SECRET` with Wrangler secrets before deployment; never put
+their values in `.dev.vars`, Git, or command history.
 
 ## Releases
 

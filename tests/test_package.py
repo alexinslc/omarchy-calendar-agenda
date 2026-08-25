@@ -83,10 +83,25 @@ class PackageTests(unittest.TestCase):
     def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["assets"]["directory"], "./site")
+        self.assertEqual(config["assets"]["binding"], "ASSETS")
+        self.assertEqual(config["main"], "worker.js")
+        self.assertEqual(
+            config["secrets"]["required"],
+            ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        )
         self.assertEqual(
             config["routes"],
             [{"pattern": "calendar.alexinslc.com", "custom_domain": True}],
         )
+
+    def test_production_oauth_credentials_are_not_committed(self) -> None:
+        self.assertFalse((ROOT / "oauth-client.json").exists())
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("oauth-client.json", ignored)
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('const CLIENT_CONFIG_PATH = "/oauth/client-config";', worker)
+        self.assertIn("env.GOOGLE_OAUTH_CLIENT_ID", worker)
+        self.assertIn("env.GOOGLE_OAUTH_CLIENT_SECRET", worker)
 
     def test_agenda_has_one_settings_panel_and_visible_mode_selector(self) -> None:
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")

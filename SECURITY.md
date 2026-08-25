@@ -21,7 +21,8 @@ removed.
   loopback-only callback.
 - Refresh tokens must be stored through the Linux Secret Service, never in
   source, logs, command-line arguments, or plaintext fallback files.
-- Network destinations must be fixed Google HTTPS endpoints.
+- Network destinations must be fixed Google HTTPS endpoints plus the exact
+  production configuration endpoint on `calendar.alexinslc.com`.
 - Event content is untrusted input and must be rendered as plain text.
 - Event links may only be opened after an explicit user action and must use
   HTTPS.
@@ -29,17 +30,22 @@ removed.
   elevated privileges. QML may start only the bundled `calendar_agenda.py`
   entry point with fixed argument arrays for explicit account actions.
 - The helper may invoke `secret-tool` only with an argument list and token
-  input on stdin; it never uses `shell=True`. OAuth and API URLs are fixed
-  constants, and the only non-HTTPS URL is the 127.0.0.1 callback.
+  input on stdin; it never uses `shell=True`. OAuth, API, and configuration
+  URLs are fixed constants, and the only non-HTTPS URL is the 127.0.0.1
+  callback.
 - The cache path is
   `~/.local/state/omarchy/calendar-agenda/events.json`; its parent directory
   is mode `0700` and the file is mode `0600`, replaced with `os.replace` after
   flush and `fsync`.
 
-Release builds use a bundled public Google desktop OAuth client configuration;
-developers may use the mode-`0600` private override at
-`~/.config/omarchy/calendar-agenda/config.json`. The private account registry
-contains stable provider identifiers and display metadata but never tokens.
+Production OAuth client credentials are stored as encrypted Cloudflare Worker
+secret bindings, never in Git or release archives. The Worker returns only the
+distributable desktop-client configuration and never receives Google user data,
+authorization codes, or tokens. The plugin validates and caches that
+configuration with mode `0600`; developers may use the mode-`0600` private
+override at `~/.config/omarchy/calendar-agenda/config.json`. The private account
+registry contains stable provider identifiers and display metadata but never
+tokens.
 Refresh tokens remain exclusively in Secret Service. The helper can run as an
 explicit one-shot sync or through the bundled 15-minute systemd user timer. QML
 consumes only structured helper output and the versioned local cache, rejecting

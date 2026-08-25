@@ -8,6 +8,7 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import sync.config as config_module
 from sync.cache import CACHE_SCHEMA_VERSION, purge_account, write_events
 from sync.cli import _connect_account, _remove_connected_account, main
 from sync.config import ConfigError, GoogleConfig, load_config
@@ -81,7 +82,7 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_config(self.path)
 
-    def test_public_desktop_client_does_not_require_a_secret(self) -> None:
+    def test_config_accepts_a_google_client_without_an_issued_secret(self) -> None:
         self.path.write_text(
             json.dumps(
                 {"google": {"client_id": "test-client.apps.googleusercontent.com"}}
@@ -89,6 +90,107 @@ class ConfigTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertEqual(load_config(self.path).client_secret, "")
+
+    def test_fetches_and_privately_caches_production_config(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        payload = {
+            "schemaVersion": 1,
+            "google": {
+                "client_id": "production.apps.googleusercontent.com",
+                "client_secret": "issued-desktop-value",
+            },
+        }
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch("sync.config.fetch_remote_config", return_value=payload) as fetch,
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "production.apps.googleusercontent.com")
+        self.assertEqual(loaded.client_secret, "issued-desktop-value")
+        self.assertEqual(stat.S_IMODE(cached.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(cached.parent.stat().st_mode), 0o700)
+        fetch.assert_called_once_with()
+
+    def test_private_override_wins_without_fetching_production_config(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        override.write_text(
+            json.dumps(
+                {
+                    "google": {
+                        "client_id": "private.apps.googleusercontent.com",
+                        "client_secret": "private-value",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch("sync.config.fetch_remote_config") as fetch,
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "private.apps.googleusercontent.com")
+        fetch.assert_not_called()
+
+    def test_stale_valid_cache_survives_configuration_endpoint_outage(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        cached.parent.mkdir(parents=True)
+        cached.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "google": {
+                        "client_id": "cached.apps.googleusercontent.com",
+                        "client_secret": "cached-value",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch.object(config_module, "_cache_is_fresh", return_value=False),
+            patch(
+                "sync.config.fetch_remote_config",
+                side_effect=ConfigError("endpoint unavailable"),
+            ),
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "cached.apps.googleusercontent.com")
+
+    def test_rejects_invalid_remote_schema_before_caching(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "schema"):
+            config_module._parse_config(
+                {
+                    "schemaVersion": 2,
+                    "google": {
+                        "client_id": "production.apps.googleusercontent.com",
+                        "client_secret": "issued-desktop-value",
+                    },
+                },
+                require_secret=True,
+            )
+
+    def test_remote_config_cannot_inject_legacy_accounts(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "must not contain accounts"):
+            config_module._parse_config(
+                {
+                    "schemaVersion": 1,
+                    "google": {
+                        "client_id": "production.apps.googleusercontent.com",
+                        "client_secret": "issued-desktop-value",
+                        "accounts": ["injected"],
+                    },
+                },
+                require_secret=True,
+                allow_accounts=False,
+            )
 
 
 class CacheTests(unittest.TestCase):
@@ -225,6 +327,26 @@ class GoogleTests(unittest.TestCase):
             "http://127.0.0.1:4321/oauth2callback",
         )
         self.assertNotIn("client_secret", request_mock.call_args.args[1])
+
+    @patch(
+        "sync.google._form_request",
+        return_value={
+            "refresh_token": "refresh-token",
+            "access_token": "access-token",
+        },
+    )
+    def test_desktop_client_exchange_includes_issued_secret(self, request_mock) -> None:
+        exchange_code(
+            "test-client.apps.googleusercontent.com",
+            "issued-client-secret",
+            "authorization-code",
+            "verifier",
+            "http://127.0.0.1:4321/oauth2callback",
+        )
+        self.assertEqual(
+            request_mock.call_args.args[1]["client_secret"],
+            "issued-client-secret",
+        )
 
     def test_user_info_requires_stable_subject_and_email(self) -> None:
         class Response:

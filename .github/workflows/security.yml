@@ -52,24 +52,14 @@ jobs:
           if grep -RInE \
             --exclude-dir=.git \
             --exclude='security.yml' \
-            --exclude='oauth-client.json' \
             '(BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY|AIza[0-9A-Za-z_-]{20,}|[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com)' \
             .; then
             echo "Possible credential detected in source."
             exit 1
           fi
           if test -f oauth-client.json; then
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          google = json.loads(Path("oauth-client.json").read_text())["google"]
-          client_id = google.get("client_id", "")
-          if not client_id.endswith(".apps.googleusercontent.com"):
-              raise SystemExit("bundled OAuth client ID is invalid")
-          if google.get("client_secret", ""):
-              raise SystemExit("bundled desktop OAuth client must not contain a secret")
-          PY
+            echo "Production OAuth credentials must not be committed."
+            exit 1
           fi
 
       - name: Enforce Python standard library only

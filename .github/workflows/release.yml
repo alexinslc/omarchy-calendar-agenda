@@ -32,14 +32,8 @@ jobs:
           tag = os.environ["GITHUB_REF_NAME"]
           if tag != f"v{version}":
               raise SystemExit(f"tag {tag!r} does not match manifest version {version!r}")
-          client_path = Path("oauth-client.json")
-          if not client_path.is_file():
-              raise SystemExit("release is missing the production OAuth desktop client")
-          google = json.loads(client_path.read_text())["google"]
-          if not google.get("client_id", "").endswith(".apps.googleusercontent.com"):
-              raise SystemExit("release OAuth desktop client ID is invalid")
-          if google.get("client_secret", ""):
-              raise SystemExit("release OAuth desktop client must not contain a secret")
+          if Path("oauth-client.json").exists():
+              raise SystemExit("release source must not contain OAuth client credentials")
           PY
           python3 -m unittest discover -s tests -v
 
