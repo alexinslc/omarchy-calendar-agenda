@@ -36,7 +36,6 @@ Flickable {
                 font.family: Style.font.family
                 font.pixelSize: Style.font.title
                 font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
             }
 
             Button {
