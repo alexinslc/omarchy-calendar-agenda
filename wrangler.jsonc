@@ -1,0 +1,14 @@
+{
+  "name": "omarchy-calendar-agenda-site",
+  "compatibility_date": "2026-08-24",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./site"
+  },
+  "routes": [
+    {
+      "pattern": "calendar.alexinslc.com",
+      "custom_domain": true
+    }
+  ]
+}

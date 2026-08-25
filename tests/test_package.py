@@ -69,6 +69,25 @@ class PackageTests(unittest.TestCase):
         self.assertIn('["/usr/bin/python3", root.helperPath', service)
         self.assertEqual(service.count("Process " + "{"), 2)
 
+    def test_public_site_and_plugin_use_the_same_privacy_url(self) -> None:
+        privacy_url = "https://calendar.alexinslc.com/privacy/"
+        onboarding = (ROOT / "OnboardingPanel.qml").read_text(encoding="utf-8")
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(privacy_url, onboarding)
+        self.assertIn('href="/privacy/"', homepage)
+        self.assertIn("Google API Services User Data Policy", privacy)
+
+    def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertEqual(config["assets"]["directory"], "./site")
+        self.assertEqual(
+            config["routes"],
+            [{"pattern": "calendar.alexinslc.com", "custom_domain": True}],
+        )
+
     def test_agenda_has_one_settings_panel_and_visible_mode_selector(self) -> None:
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
         self.assertEqual(panel.count("SettingsPanel {"), 1)

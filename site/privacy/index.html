@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Privacy policy for Calendar Agenda, a local read-only Google Calendar plugin for Omarchy.">
+    <meta name="theme-color" content="#11131a">
+    <link rel="canonical" href="https://calendar.alexinslc.com/privacy/">
+    <link rel="stylesheet" href="/styles.css">
+    <title>Privacy Policy · Calendar Agenda</title>
+  </head>
+  <body>
+    <header>
+      <nav class="shell" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Calendar Agenda
+        </a>
+        <div class="nav-links">
+          <a href="/">Home</a>
+          <a href="/privacy/" aria-current="page">Privacy</a>
+          <a href="https://github.com/alexinslc/omarchy-calendar-agenda">Source</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <article class="prose">
+        <p class="eyebrow">Last updated August 24, 2026</p>
+        <h1>Privacy Policy</h1>
+        <p>Calendar Agenda is a local desktop plugin that shows events from the Google calendars a user explicitly connects.</p>
+
+        <h2>Google data accessed</h2>
+        <p>The plugin requests the user's basic Google account identity, including a stable account identifier and email address; the list of calendars available to that account; and read-only access to calendar events. It cannot create, modify, share, or delete Google calendars or events.</p>
+
+        <h2>How data is used</h2>
+        <p>Google account identity is used to label connected accounts and prevent the same account from being connected twice. Calendar identifiers, names, colors, and events are used only to display and filter the local agenda selected by the user.</p>
+        <p>The plugin does not sell Google user data, use it for advertising, transfer it to an external service, or use it to train machine-learning models. Its use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+        <h2>Storage and sharing</h2>
+        <p>OAuth refresh tokens are stored in the user's Linux Secret Service. Account metadata, synchronization status, calendar metadata, and a rolling local event cache are stored only on the user's computer under private user permissions.</p>
+        <p>The project does not operate a server that receives Google user data. The public website does not use cookies, analytics, advertising, or tracking scripts, and the plugin does not share Google user data with the project maintainer or third parties.</p>
+
+        <h2>Retention and deletion</h2>
+        <p>The event cache covers approximately 28 days and is replaced during synchronization. Removing an account from Calendar Agenda revokes the Google authorization when Google is reachable, deletes the local refresh token, removes the account registry entry, and immediately purges that account's cached calendar data.</p>
+        <p>Users may also revoke access from the third-party connections page in their Google Account. Removing Calendar Agenda does not delete calendars or events from Google.</p>
+
+        <h2>Data protection</h2>
+        <p>Authorization uses the system browser, Proof Key for Code Exchange (PKCE), a random state value, and a loopback-only callback. Refresh tokens are never written to the event cache, passed as command-line arguments, or included in application logs.</p>
+
+        <h2>Children's privacy</h2>
+        <p>Calendar Agenda is a general-purpose productivity tool and is not directed to children. The project does not knowingly collect children's personal information through a project-operated service.</p>
+
+        <h2>Changes</h2>
+        <p>This policy may be updated when Calendar Agenda's data practices or Google API requirements change. The current version and its effective date will remain available at this URL.</p>
+
+        <h2>Questions and security reports</h2>
+        <p>For privacy questions, open a <a href="https://github.com/alexinslc/omarchy-calendar-agenda/issues">GitHub issue</a> without including calendar contents, OAuth tokens, or other private account information. Security issues should use the repository's <a href="https://github.com/alexinslc/omarchy-calendar-agenda/security/policy">private vulnerability reporting guidance</a>.</p>
+      </article>
+    </main>
+
+    <footer>
+      <div class="shell footer-content">
+        <span>Calendar Agenda · Privacy</span>
+        <div class="footer-links"><a href="/">Home</a><a href="/terms/">Terms</a><a href="https://github.com/alexinslc/omarchy-calendar-agenda">Source</a></div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -42,8 +42,8 @@ A production release must include the project's public Google desktop OAuth
 client configuration. A source checkout without that configuration displays a
 clear unavailable message instead of starting an incomplete authorization.
 
-See [PRIVACY.md](PRIVACY.md) for how Google account and calendar data is used,
-stored, and deleted.
+See the public [Privacy Policy](https://calendar.alexinslc.com/privacy/) for how
+Google account and calendar data is used, stored, and deleted.
 
 ## Development
 
@@ -193,6 +193,25 @@ Validate the plugin manifest before opening a pull request:
 omarchy plugin validate .
 python3 -m unittest discover -s tests -v
 ```
+
+## Public website
+
+The OAuth homepage, privacy policy, and terms are plain static files in
+`site/`. They are deployed to `https://calendar.alexinslc.com` with Cloudflare
+Workers Static Assets; Wrangler creates the custom-domain DNS record and TLS
+certificate.
+
+Omarchy supplies Node.js and npx through mise. Preview or deploy with a pinned
+Wrangler version that runs from npm's external cache rather than adding a
+dependency tree to the plugin:
+
+```bash
+WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 dev
+WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 deploy
+```
+
+No framework, analytics, server-side code, Cloudflare Tunnel, project-local
+dependency tree, or global npm package is used.
 
 ## Releases
 
