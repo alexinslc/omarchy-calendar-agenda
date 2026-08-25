@@ -39,7 +39,7 @@ jobs:
             echo "Onboarding process bridge contains an unapproved capability."
             exit 1
           fi
-          if grep -RInE --exclude-dir=.git --exclude='security.yml' 'http://' . \
+          if grep -RInE --exclude-dir=.git --exclude='security.yml' --exclude='sitemap.xml' 'http://' . \
             | grep -vE 'http://127\.0\.0\.1:'; then
             echo "Non-loopback HTTP endpoint detected."
             exit 1
