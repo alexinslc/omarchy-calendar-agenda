@@ -42,8 +42,6 @@ Flickable {
                 anchors.fill: parent
                 onClicked: panel.settingsOpen = false
             }
-        }
-}
 }
     }
 
