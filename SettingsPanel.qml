@@ -27,8 +27,6 @@ Flickable {
         Row {
             width: parent.width
             height: Style.space(34)
-            spacing: Style.space(8)
-
             Text {
                 text: "SETTINGS"
                 color: panel.contentForeground
@@ -37,7 +35,6 @@ Flickable {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
             }
-
             Text {
                 text: "DONE"
                 width: parent.width - Style.space(80)
@@ -69,12 +66,24 @@ Flickable {
                 { "key": "showCalendar", "label": "Calendar names" },
                 { "key": "showLocation", "label": "Locations" }
             ]
-            delegate: Toggle {
+            delegate: CompactToggle {
                 required property var modelData
                 width: root.width
                 label: modelData.label
                 checked: panel.preferences[modelData.key]
                 onClicked: root.toggleField(modelData.key)
+            }
+        }
+
+        ButtonGroup {
+            width: root.width
+            options: ["24-hour", "12-hour"]
+            value: panel.preferences.timeFormat === "12" ? "12-hour" : "24-hour"
+            onChanged: function(value) {
+                var updated = Object.assign({}, panel.preferences)
+                updated.timeFormat = value === "12-hour" ? "12" : "24"
+                panel.preferences = updated
+                panel.savePreferences()
             }
         }
 
@@ -89,7 +98,7 @@ Flickable {
 
         Repeater {
             model: panel.calendarOptions
-            delegate: Toggle {
+            delegate: CompactToggle {
                 required property var modelData
                 width: root.width
                 label: modelData.name
@@ -115,7 +124,7 @@ Flickable {
 
         Repeater {
             model: panel.accountOptions
-            delegate: Toggle {
+            delegate: CompactToggle {
                 required property string modelData
                 width: root.width
                 label: modelData
@@ -130,14 +139,13 @@ Flickable {
             }
         }
 
-        Toggle {
+        ButtonGroup {
             width: root.width
-            label: "Refresh interval"
-            description: "Automatically reload cached events"
-            checked: panel.preferences.refreshMinutes === 15
-            onClicked: {
+            options: ["15 minutes", "30 minutes"]
+            value: panel.preferences.refreshMinutes === 30 ? "30 minutes" : "15 minutes"
+            onChanged: function(value) {
                 var updated = Object.assign({}, panel.preferences)
-                updated.refreshMinutes = panel.preferences.refreshMinutes === 15 ? 30 : 15
+                updated.refreshMinutes = value === "30 minutes" ? 30 : 15
                 panel.preferences = updated
                 panel.savePreferences()
             }

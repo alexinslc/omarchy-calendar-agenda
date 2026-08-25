@@ -24,9 +24,15 @@ function dateOnlyKey(value) {
     return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : keyForDate(new Date(text))
 }
 
-function timeLabel(value) {
+function timeLabel(value, twelveHour) {
     var date = new Date(value)
     if (isNaN(date.getTime())) return ""
+    if (twelveHour) {
+        var hour = date.getHours()
+        var suffix = hour >= 12 ? " PM" : " AM"
+        hour = hour % 12 || 12
+        return hour + ":" + pad(date.getMinutes()) + suffix
+    }
     return pad(date.getHours()) + ":" + pad(date.getMinutes())
 }
 

@@ -24,6 +24,7 @@ Panel {
         "showTime": true,
         "showCalendar": true,
         "showLocation": true,
+        "timeFormat": "24",
         "refreshMinutes": 15,
         "accounts": {},
         "calendars": {}
@@ -541,7 +542,11 @@ Panel {
                                             Text {
                                                 width: Style.space(58)
                                                 visible: root.preferences.showTime
-                                                text: modelData.timeLabel
+                                                text: modelData.allDay
+                                                    ? modelData.timeLabel
+                                                    : (root.preferences.timeFormat === "12"
+                                                        ? AgendaModel.timeLabel(modelData.start, true)
+                                                        : modelData.timeLabel)
                                                 color: modelData.allDay ? root.accentForeground : root.mutedForeground
                                                 font.family: Style.font.family
                                                 font.pixelSize: Style.font.bodySmall
