@@ -19,7 +19,21 @@ Panel {
     property var groups: []
     property string dataState: "loading"
     property string dataMessage: "Loading calendar data..."
+    property bool settingsOpen: false
+    property bool preferencesLoaded: false
+    property var preferences: ({
+        "showTime": true,
+        "showCalendar": true,
+        "showLocation": true,
+        "timeFormat": "24",
+        "refreshMinutes": 15,
+        "accounts": {},
+        "calendars": {}
+    })
+    property var accountOptions: []
+    property var calendarOptions: []
     readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/events.json"
+    readonly property string settingsPath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/settings.json"
 
     readonly property color contentForeground: bar ? bar.foreground : Color.foreground
     readonly property color contentBackground: Color.background
@@ -36,6 +50,8 @@ Panel {
                 "calendar cache contains invalid JSON:",
                 error.message
             )
+            root.events = []
+            root.groups = []
             root.dataState = "error"
             root.dataMessage = "Calendar data is unavailable. Run a sync to refresh it."
             return
@@ -43,11 +59,43 @@ Panel {
         root.events = AgendaModel.parseEvents(data)
         root.dataState = "ready"
         root.dataMessage = ""
+        root.updateOptions()
         rebuild()
     }
 
+    function updateOptions() {
+        var accounts = {}
+        var calendars = {}
+        for (var i = 0; i < root.events.length; i++) {
+            var event = root.events[i]
+            if (event.accountId) accounts[event.accountId] = true
+            if (event.calendarId) {
+                calendars[event.calendarId] = {
+                    "id": event.calendarId,
+                    "name": event.calendarName || event.calendarId
+                }
+            }
+        }
+        root.accountOptions = Object.keys(accounts).sort()
+        root.calendarOptions = Object.keys(calendars).sort().map(function(id) {
+            return calendars[id]
+        })
+    }
+
+    function enabled(map, key) {
+        return !map || map[key] !== false
+    }
+
+    function savePreferences() {
+        settingsFile.setText(JSON.stringify(root.preferences, null, 2) + "\n")
+    }
+
     function rebuild() {
-        root.groups = AgendaModel.groupedEvents(root.events, root.viewMode, root.anchorDate)
+        var visible = root.events.filter(function(event) {
+            return root.enabled(root.preferences.accounts, event.accountId)
+                && root.enabled(root.preferences.calendars, event.calendarId)
+        })
+        root.groups = AgendaModel.groupedEvents(visible, root.viewMode, root.anchorDate)
     }
 
     function setMode(mode) {
@@ -81,6 +129,28 @@ Panel {
     }
 
     FileView {
+        id: settingsFile
+        path: root.settingsPath
+        atomicWrites: true
+        printErrors: false
+        onLoaded: {
+            try {
+                var parsed = JSON.parse(text())
+                if (parsed && typeof parsed === "object")
+                    root.preferences = Object.assign(root.preferences, parsed)
+            } catch (error) {
+                console.warn("calendar settings could not be loaded:", error)
+            }
+            root.preferencesLoaded = true
+            root.rebuild()
+        }
+        onLoadFailed: {
+            root.preferencesLoaded = true
+            root.rebuild()
+        }
+    }
+
+    FileView {
         id: cacheFile
         path: root.cachePath
         watchChanges: true
@@ -88,13 +158,15 @@ Panel {
         onFileChanged: reload()
         onLoaded: root.loadEvents(text())
         onLoadFailed: {
+            root.events = []
+            root.groups = []
             root.dataState = "error"
             root.dataMessage = "No calendar data is available. Run a sync to refresh it."
         }
     }
 
     Timer {
-        interval: 60000
+        interval: root.preferences.refreshMinutes * 60000
         running: true
         repeat: true
         onTriggered: cacheFile.reload()
@@ -128,17 +200,25 @@ Panel {
                 else if (text === "m" || text === "M") root.setMode("month")
             }
 
+            SettingsPanel {
+                visible: root.settingsOpen
+                panel: root
+            }
+
             Column {
                 id: agendaColumn
+                visible: !root.settingsOpen
                 anchors.fill: parent
                 anchors.margins: Style.space(16)
                 spacing: Style.space(10)
 
-                Row {
+                Item {
                     width: parent.width
-                    spacing: Style.space(8)
+                    height: Style.space(32)
 
                     Text {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "󰃭"
                         color: root.accentForeground
                         font.family: Style.font.family
@@ -146,12 +226,25 @@ Panel {
                     }
 
                     Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: Style.space(32)
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "CALENDAR AGENDA"
                         color: root.contentForeground
                         font.family: Style.font.family
                         font.pixelSize: Style.font.bodySmall
                         font.bold: true
+                    }
+
+                    Button {
+                        anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
+                        iconText: "󰒓"
+                        tooltipText: "Calendar settings"
+                        bordered: true
+                        horizontalPadding: Style.space(7)
+                        verticalPadding: Style.space(4)
+                        onClicked: root.settingsOpen = true
                     }
                 }
 
@@ -183,6 +276,178 @@ Panel {
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: root.setMode(parent.modelData)
+                            }
+                        }
+
+                        Column {
+                            id: settingsColumn
+                            visible: false
+                            anchors.fill: parent
+                            anchors.margins: Style.space(16)
+                            spacing: Style.space(10)
+
+                            Row {
+                                width: parent.width
+                                spacing: Style.space(8)
+                                Text {
+                                    text: "SETTINGS"
+                                    color: root.contentForeground
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.body
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: "Done"
+                                    width: parent.width - Style.space(70)
+                                    color: root.accentForeground
+                                    horizontalAlignment: Text.AlignRight
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: root.settingsOpen = false
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "DISPLAY"
+                                color: root.accentForeground
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.bodySmall
+                                font.bold: true
+                            }
+
+                            Repeater {
+                                model: [
+                                    { "key": "showTime", "label": "Show event times" },
+                                    { "key": "showCalendar", "label": "Show calendar names" },
+                                    { "key": "showLocation", "label": "Show locations" }
+                                ]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Style.space(30)
+                                    color: "transparent"
+                                    Text {
+                                        text: modelData.label
+                                        color: root.contentForeground
+                                        font.family: Style.font.family
+                                        font.pixelSize: Style.font.body
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: root.preferences[modelData.key] ? "ON" : "OFF"
+                                        color: root.preferences[modelData.key] ? root.accentForeground : root.mutedForeground
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                var updated = Object.assign({}, root.preferences)
+                                                updated[modelData.key] = !root.preferences[modelData.key]
+                                                root.preferences = updated
+                                                root.savePreferences()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "CALENDARS"
+                                color: root.accentForeground
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.bodySmall
+                                font.bold: true
+                            }
+
+                            Text {
+                                text: "ACCOUNTS"
+                                color: root.accentForeground
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.bodySmall
+                                font.bold: true
+                            }
+
+                            Repeater {
+                                model: root.accountOptions
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    width: parent.width
+                                    height: Style.space(30)
+                                    color: "transparent"
+                                    Text {
+                                        text: modelData
+                                        color: root.contentForeground
+                                        font.family: Style.font.family
+                                        font.pixelSize: Style.font.body
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: root.enabled(root.preferences.accounts, modelData) ? "ON" : "OFF"
+                                        color: root.enabled(root.preferences.accounts, modelData) ? root.accentForeground : root.mutedForeground
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                var accounts = Object.assign({}, root.preferences.accounts)
+                                                accounts[modelData] = !root.enabled(accounts, modelData)
+                                                root.preferences = Object.assign({}, root.preferences, { "accounts": accounts })
+                                                root.savePreferences()
+                                                root.rebuild()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "REFRESH: " + root.preferences.refreshMinutes + " MIN"
+                                color: root.contentForeground
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.body
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        var updated = Object.assign({}, root.preferences)
+                                        updated.refreshMinutes = root.preferences.refreshMinutes === 15 ? 30 : 15
+                                        root.preferences = updated
+                                        root.savePreferences()
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: root.calendarOptions
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Style.space(30)
+                                    color: "transparent"
+                                    Text {
+                                        text: modelData.name
+                                        color: root.contentForeground
+                                        font.family: Style.font.family
+                                        font.pixelSize: Style.font.body
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: root.enabled(root.preferences.calendars, modelData.id) ? "ON" : "OFF"
+                                        color: root.enabled(root.preferences.calendars, modelData.id) ? root.accentForeground : root.mutedForeground
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                var calendars = Object.assign({}, root.preferences.calendars)
+                                                calendars[modelData.id] = !root.enabled(calendars, modelData.id)
+                                                root.preferences = Object.assign({}, root.preferences, { "calendars": calendars })
+                                                root.savePreferences()
+                                                root.rebuild()
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -285,7 +550,12 @@ Panel {
 
                                             Text {
                                                 width: Style.space(58)
-                                                text: modelData.timeLabel
+                                                visible: root.preferences.showTime
+                                                text: modelData.allDay
+                                                    ? modelData.timeLabel
+                                                    : (root.preferences.timeFormat === "12"
+                                                        ? AgendaModel.timeLabel(modelData.start, true)
+                                                        : modelData.timeLabel)
                                                 color: modelData.allDay ? root.accentForeground : root.mutedForeground
                                                 font.family: Style.font.family
                                                 font.pixelSize: Style.font.bodySmall
@@ -294,9 +564,13 @@ Panel {
 
                                             Text {
                                                 id: eventText
-                                                width: parent.width - Style.space(67)
+                                                width: parent.width - (root.preferences.showTime ? Style.space(67) : Style.space(9))
                                                 textFormat: Text.PlainText
-                                                text: modelData.title + (modelData.location ? "\n" + modelData.location : "")
+                                                text: modelData.title
+                                                    + (root.preferences.showCalendar && modelData.calendarName
+                                                        ? "\n" + modelData.calendarName : "")
+                                                    + (root.preferences.showLocation && modelData.location
+                                                        ? "\n" + modelData.location : "")
                                                 color: root.contentForeground
                                                 font.family: Style.font.family
                                                 font.pixelSize: Style.font.body

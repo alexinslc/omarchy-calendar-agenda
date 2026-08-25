@@ -199,7 +199,17 @@ def _json_request(
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read()
     except urllib.error.HTTPError as error:
-        raise GoogleApiError(f"{endpoint_name} returned HTTP {error.code}") from error
+        try:
+            details = json.loads(error.read())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            details = {}
+        if not isinstance(details, dict):
+            details = {}
+        reason = details.get("error_description") or details.get("error")
+        suffix = f": {reason}" if isinstance(reason, str) and reason else ""
+        raise GoogleApiError(
+            f"{endpoint_name} returned HTTP {error.code}{suffix}"
+        ) from error
     except urllib.error.URLError as error:
         raise GoogleApiError(f"{endpoint_name} request failed: {error.reason}") from error
     try:
@@ -222,12 +232,17 @@ def _form_request(url: str, values: dict[str, str], endpoint_name: str) -> dict[
 
 
 def exchange_code(
-    client_id: str, code: str, verifier: str, redirect_uri: str
+    client_id: str,
+    client_secret: str,
+    code: str,
+    verifier: str,
+    redirect_uri: str,
 ) -> tuple[str, OAuthToken]:
     data = _form_request(
         TOKEN_ENDPOINT,
         {
             "client_id": client_id,
+            "client_secret": client_secret,
             "code": code,
             "code_verifier": verifier,
             "grant_type": "authorization_code",
@@ -247,11 +262,14 @@ def exchange_code(
     return refresh_token, OAuthToken(access_token=access_token, expires_in=expires_in)
 
 
-def refresh_access_token(client_id: str, refresh_token: str) -> OAuthToken:
+def refresh_access_token(
+    client_id: str, client_secret: str, refresh_token: str
+) -> OAuthToken:
     data = _form_request(
         TOKEN_ENDPOINT,
         {
             "client_id": client_id,
+            "client_secret": client_secret,
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         },
@@ -320,7 +338,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         return
 
 
-def authorize(client_id: str) -> tuple[str, OAuthToken]:
+def authorize(client_id: str, client_secret: str) -> tuple[str, OAuthToken]:
     state = secrets.token_urlsafe(32)
     verifier, challenge = pkce_pair()
     result_queue: queue.Queue[dict[str, str]] = queue.Queue(maxsize=1)
@@ -343,7 +361,13 @@ def authorize(client_id: str) -> tuple[str, OAuthToken]:
             raise OAuthError("Google authorization state did not match")
         if "error" in result:
             raise OAuthError(f"Google authorization failed: {result['error']}")
-        return exchange_code(client_id, result["code"], verifier, redirect_uri)
+        return exchange_code(
+            client_id,
+            client_secret,
+            result["code"],
+            verifier,
+            redirect_uri,
+        )
     finally:
         server.shutdown()
         server.server_close()
@@ -434,7 +458,14 @@ class GoogleCalendarClient:
             seen_tokens.add(page_token)
 
 
-def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_event(
+    event: dict[str, Any],
+    *,
+    account_id: str = "",
+    calendar_id: str = "",
+    calendar_name: str = "",
+    calendar_color: str = "",
+) -> dict[str, Any] | None:
     """Map one Google event to the existing QML event JSON contract."""
     if event.get("status") == "cancelled":
         return None
@@ -470,4 +501,8 @@ def normalize_event(event: dict[str, Any]) -> dict[str, Any] | None:
         "end": end_value,
         "allDay": all_day,
         "location": location,
+        "accountId": account_id,
+        "calendarId": calendar_id,
+        "calendarName": calendar_name,
+        "calendarColor": calendar_color,
     }

@@ -3,10 +3,10 @@
 A lightweight, agenda-focused Google Calendar widget for Omarchy.
 
 This project is in prototype development. The current prototype provides a
-top-right bar icon with compact day, week, and month agenda views. It reads normalized events from the private Google
-sync cache and reports an actionable error when no valid cache is available.
-Google access uses read-only OAuth with support for multiple accounts and
-calendars.
+top-right bar icon with compact day, week, and month agenda views. It reads
+normalized events from the private Google sync cache and reports an actionable
+error when no valid cache is available. Google access uses read-only OAuth
+with support for multiple accounts and calendars.
 
 ## Security model
 
@@ -65,24 +65,29 @@ file changes, and checks for updates while the shell is running. If no cache
 exists or contains invalid data, it shows an error instead of presenting
 misleading fixture events. Google Calendar synchronization is a one-shot
 command for now; periodic 15-minute scheduling will be added in a later phase.
+Open the panel's gear button to configure displayed event fields, account and
+calendar visibility, and the cache refresh interval. These preferences are
+stored at `~/.local/state/omarchy/calendar-agenda/settings.json`.
 
 ## Google sync foundation
 
 The helper uses Python's standard library only. It reads this configuration
-file (no client secret is used):
+file:
 `~/.config/omarchy/calendar-agenda/config.json`
 
 ```json
 {
   "google": {
     "client_id": "YOUR-OAUTH-CLIENT-ID.apps.googleusercontent.com",
+    "client_secret": "YOUR-DESKTOP-CLIENT-SECRET",
     "accounts": ["personal", "work"]
   }
 }
 ```
 
-Create an OAuth client in Google Cloud as a desktop application and add one
-stable local account ID for each Google account. Install `secret-tool` and a
+Create an OAuth client in Google Cloud as a desktop application and copy both
+the client ID and client secret into this local file. Add one stable local
+account ID for each Google account. Install `secret-tool` and a
 Secret Service provider (for example, GNOME Keyring or KeePassXC), then
 authorize each configured account:
 
@@ -99,7 +104,8 @@ and sync fail clearly; there is no plaintext fallback. Use
 `--disconnect --account personal` to revoke and remove a stored token.
 
 The helper lists every calendar for every configured account, follows API
-pagination, and normalizes Google events to the existing QML contract:
+pagination, and synchronizes events from the current moment through the next
+28 days. It normalizes Google events to the existing QML contract:
 `title`, `start`, `end`, `allDay`, and `location`. Canceled events are omitted
 and missing Google summaries are represented explicitly as `(untitled event)`.
 The cache is written atomically, with mode `0600`, at:

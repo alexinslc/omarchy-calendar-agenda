@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 import logging
 import sys
 from pathlib import Path
@@ -50,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         store = SecretToolStore()
         if args.authorize:
             for account_id in accounts:
-                refresh_token, _ = authorize(config.client_id)
+                refresh_token, _ = authorize(config.client_id, config.client_secret)
                 store.save(account_id, refresh_token)
             return 0
         if args.disconnect:
@@ -61,15 +62,34 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         events: list[dict[str, object]] = []
+        now = datetime.now(timezone.utc)
+        time_min = now.isoformat().replace("+00:00", "Z")
+        time_max = (now + timedelta(days=28)).isoformat().replace(
+            "+00:00", "Z"
+        )
         for account_id in accounts:
-            token = refresh_access_token(config.client_id, store.load(account_id))
+            token = refresh_access_token(
+                config.client_id,
+                config.client_secret,
+                store.load(account_id),
+            )
             client = GoogleCalendarClient(token.access_token)
             for calendar in client.list_calendars():
                 calendar_id = calendar.get("id")
                 if not isinstance(calendar_id, str) or not calendar_id:
                     raise GoogleError("Google calendar list contained an invalid calendar ID")
-                for event in client.list_events(calendar_id):
-                    normalized = normalize_event(event)
+                for event in client.list_events(
+                    calendar_id,
+                    time_min=time_min,
+                    time_max=time_max,
+                ):
+                    normalized = normalize_event(
+                        event,
+                        account_id=account_id,
+                        calendar_id=calendar_id,
+                        calendar_name=str(calendar.get("summary", calendar_id)),
+                        calendar_color=str(calendar.get("backgroundColor", "")),
+                    )
                     if normalized is not None:
                         events.append(normalized)
         write_events(events)
