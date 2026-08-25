@@ -20,6 +20,7 @@ Panel {
     property string dataState: "loading"
     property string dataMessage: "Loading calendar data..."
     property bool settingsOpen: false
+    property bool preferencesLoaded: false
     property var preferences: ({
         "showTime": true,
         "showCalendar": true,
@@ -140,6 +141,11 @@ Panel {
             } catch (error) {
                 console.warn("calendar settings could not be loaded:", error)
             }
+            root.preferencesLoaded = true
+            root.rebuild()
+        }
+        onLoadFailed: {
+            root.preferencesLoaded = true
             root.rebuild()
         }
     }
@@ -226,16 +232,17 @@ Panel {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    Text {
-                        text: "⚙"
-                        width: Style.space(24)
-                        color: root.mutedForeground
-                        font.pixelSize: Style.font.body
-                        horizontalAlignment: Text.AlignRight
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: root.settingsOpen = true
-                        }
+                    Item {
+                        width: parent.width - Style.space(180)
+                    }
+
+                    Button {
+                        iconText: "󰒓"
+                        tooltipText: "Calendar settings"
+                        bordered: true
+                        horizontalPadding: Style.space(7)
+                        verticalPadding: Style.space(4)
+                        onClicked: root.settingsOpen = true
                     }
                 }
 

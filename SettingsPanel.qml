@@ -7,6 +7,7 @@ Flickable {
     property var panel
     anchors.fill: parent
     anchors.margins: Style.space(16)
+    enabled: panel.preferencesLoaded
     contentWidth: width
     contentHeight: contentColumn.implicitHeight
     clip: true
@@ -35,19 +36,17 @@ Flickable {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Text {
-                text: "DONE"
+            Item {
                 width: parent.width - Style.space(80)
-                color: panel.accentForeground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-                horizontalAlignment: Text.AlignRight
+            }
+
+            Button {
+                text: "Done"
+                bordered: true
+                horizontalPadding: Style.space(8)
+                verticalPadding: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: panel.settingsOpen = false
-                }
+                onClicked: panel.settingsOpen = false
             }
         }
 
