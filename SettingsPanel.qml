@@ -25,10 +25,12 @@ Flickable {
         width: root.width
         spacing: Style.space(10)
 
-        Row {
+        Item {
             width: parent.width
             height: Style.space(34)
             Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 text: "SETTINGS"
                 color: panel.contentForeground
                 font.family: Style.font.family
@@ -36,11 +38,9 @@ Flickable {
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Item {
-                width: parent.width - Style.space(80)
-            }
 
             Button {
+                anchors.right: parent.right
                 text: "Done"
                 bordered: true
                 horizontalPadding: Style.space(8)
@@ -72,6 +72,15 @@ Flickable {
                 checked: panel.preferences[modelData.key]
                 onClicked: root.toggleField(modelData.key)
             }
+        }
+
+        Text {
+            text: "SYNC EVERY"
+            color: panel.accentForeground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
         }
 
         ButtonGroup {

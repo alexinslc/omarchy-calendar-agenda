@@ -212,11 +212,13 @@ Panel {
                 anchors.margins: Style.space(16)
                 spacing: Style.space(10)
 
-                Row {
+                Item {
                     width: parent.width
-                    spacing: Style.space(8)
+                    height: Style.space(32)
 
                     Text {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "󰃭"
                         color: root.accentForeground
                         font.family: Style.font.family
@@ -224,6 +226,9 @@ Panel {
                     }
 
                     Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: Style.space(32)
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "CALENDAR AGENDA"
                         color: root.contentForeground
                         font.family: Style.font.family
@@ -232,11 +237,9 @@ Panel {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    Item {
-                        width: parent.width - Style.space(180)
-                    }
-
                     Button {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
                         iconText: "󰒓"
                         tooltipText: "Calendar settings"
                         bordered: true
