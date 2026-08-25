@@ -230,12 +230,17 @@ def _form_request(url: str, values: dict[str, str], endpoint_name: str) -> dict[
 
 
 def exchange_code(
-    client_id: str, code: str, verifier: str, redirect_uri: str
+    client_id: str,
+    client_secret: str,
+    code: str,
+    verifier: str,
+    redirect_uri: str,
 ) -> tuple[str, OAuthToken]:
     data = _form_request(
         TOKEN_ENDPOINT,
         {
             "client_id": client_id,
+            "client_secret": client_secret,
             "code": code,
             "code_verifier": verifier,
             "grant_type": "authorization_code",
@@ -255,11 +260,14 @@ def exchange_code(
     return refresh_token, OAuthToken(access_token=access_token, expires_in=expires_in)
 
 
-def refresh_access_token(client_id: str, refresh_token: str) -> OAuthToken:
+def refresh_access_token(
+    client_id: str, client_secret: str, refresh_token: str
+) -> OAuthToken:
     data = _form_request(
         TOKEN_ENDPOINT,
         {
             "client_id": client_id,
+            "client_secret": client_secret,
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         },
@@ -328,7 +336,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         return
 
 
-def authorize(client_id: str) -> tuple[str, OAuthToken]:
+def authorize(client_id: str, client_secret: str) -> tuple[str, OAuthToken]:
     state = secrets.token_urlsafe(32)
     verifier, challenge = pkce_pair()
     result_queue: queue.Queue[dict[str, str]] = queue.Queue(maxsize=1)
@@ -351,7 +359,13 @@ def authorize(client_id: str) -> tuple[str, OAuthToken]:
             raise OAuthError("Google authorization state did not match")
         if "error" in result:
             raise OAuthError(f"Google authorization failed: {result['error']}")
-        return exchange_code(client_id, result["code"], verifier, redirect_uri)
+        return exchange_code(
+            client_id,
+            client_secret,
+            result["code"],
+            verifier,
+            redirect_uri,
+        )
     finally:
         server.shutdown()
         server.server_close()

@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         store = SecretToolStore()
         if args.authorize:
             for account_id in accounts:
-                refresh_token, _ = authorize(config.client_id)
+                refresh_token, _ = authorize(config.client_id, config.client_secret)
                 store.save(account_id, refresh_token)
             return 0
         if args.disconnect:
@@ -62,7 +62,11 @@ def main(argv: list[str] | None = None) -> int:
 
         events: list[dict[str, object]] = []
         for account_id in accounts:
-            token = refresh_access_token(config.client_id, store.load(account_id))
+            token = refresh_access_token(
+                config.client_id,
+                config.client_secret,
+                store.load(account_id),
+            )
             client = GoogleCalendarClient(token.access_token)
             for calendar in client.list_calendars():
                 calendar_id = calendar.get("id")

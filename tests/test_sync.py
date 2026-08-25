@@ -38,6 +38,7 @@ class ConfigTests(unittest.TestCase):
                 {
                     "google": {
                         "client_id": "test-client.apps.googleusercontent.com",
+                        "client_secret": "test-client-secret",
                         "accounts": ["personal", "work"],
                     }
                 }
@@ -55,6 +56,7 @@ class ConfigTests(unittest.TestCase):
                 {
                     "google": {
                         "client_id": "not-a-client-id",
+                        "client_secret": "test-client-secret",
                         "unsupported": True,
                     }
                 }

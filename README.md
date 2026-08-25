@@ -69,20 +69,22 @@ command for now; periodic 15-minute scheduling will be added in a later phase.
 ## Google sync foundation
 
 The helper uses Python's standard library only. It reads this configuration
-file (no client secret is used):
+file:
 `~/.config/omarchy/calendar-agenda/config.json`
 
 ```json
 {
   "google": {
     "client_id": "YOUR-OAUTH-CLIENT-ID.apps.googleusercontent.com",
+    "client_secret": "YOUR-DESKTOP-CLIENT-SECRET",
     "accounts": ["personal", "work"]
   }
 }
 ```
 
-Create an OAuth client in Google Cloud as a desktop application and add one
-stable local account ID for each Google account. Install `secret-tool` and a
+Create an OAuth client in Google Cloud as a desktop application and copy both
+the client ID and client secret into this local file. Add one stable local
+account ID for each Google account. Install `secret-tool` and a
 Secret Service provider (for example, GNOME Keyring or KeePassXC), then
 authorize each configured account:
 
