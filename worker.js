@@ -1,4 +1,14 @@
 const CLIENT_CONFIG_PATH = "/oauth/client-config";
+const HARDENING_HEADERS = {
+  "Cache-Control": "no-store",
+  "Content-Security-Policy": "default-src 'none'",
+  "Referrer-Policy": "no-referrer",
+  "X-Content-Type-Options": "nosniff",
+};
+
+function responseHeaders(values = {}) {
+  return { ...HARDENING_HEADERS, ...values };
+}
 
 function clientConfig(env) {
   if (!env.GOOGLE_OAUTH_CLIENT_ID || !env.GOOGLE_OAUTH_CLIENT_SECRET) {
@@ -6,11 +16,9 @@ function clientConfig(env) {
       JSON.stringify({ error: "production OAuth configuration is unavailable" }),
       {
         status: 503,
-        headers: {
+        headers: responseHeaders({
           "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff",
-        },
+        }),
       },
     );
   }
@@ -24,13 +32,9 @@ function clientConfig(env) {
       },
     }),
     {
-      headers: {
+      headers: responseHeaders({
         "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-        "Content-Security-Policy": "default-src 'none'",
-        "Referrer-Policy": "no-referrer",
-        "X-Content-Type-Options": "nosniff",
-      },
+      }),
     },
   );
 }
@@ -42,7 +46,7 @@ export default {
       if (request.method !== "GET") {
         return new Response(null, {
           status: 405,
-          headers: { Allow: "GET", "Cache-Control": "no-store" },
+          headers: responseHeaders({ Allow: "GET" }),
         });
       }
       return clientConfig(env);

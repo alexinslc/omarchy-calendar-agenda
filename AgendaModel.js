@@ -125,7 +125,15 @@ function parseCache(data) {
         if (accountIds.indexOf(accountId) !== -1)
             throw new Error("cache contains duplicate account metadata")
         accountIds.push(accountId)
-        accounts.push({ "id": accountId })
+        if (account.email !== undefined && typeof account.email !== "string")
+            throw new Error("cache contains invalid account email")
+        if (account.displayName !== undefined && typeof account.displayName !== "string")
+            throw new Error("cache contains invalid account display name")
+        accounts.push({
+            "id": accountId,
+            "email": account.email ? String(account.email) : "",
+            "displayName": account.displayName ? String(account.displayName) : ""
+        })
     }
 
     var calendars = []

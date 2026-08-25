@@ -276,7 +276,7 @@ Flickable {
                 required property var modelData
                 readonly property string preferenceKey: modelData.accountId + "::" + modelData.id
                 width: root.width
-                label: modelData.name + "  ·  " + modelData.accountId
+                label: modelData.name + "  ·  " + panel.accountLabelForId(modelData.accountId)
                 checked: panel.calendarEnabledFor(modelData.accountId, modelData.id)
                 onClicked: {
                     var calendars = Object.assign({}, panel.preferences.calendars)
@@ -300,13 +300,14 @@ Flickable {
         Repeater {
             model: panel.accountOptions
             delegate: CompactToggle {
-                required property string modelData
+                required property var modelData
+                readonly property string accountId: String(modelData.id)
                 width: root.width
-                label: modelData
-                checked: panel.preferenceEnabled(panel.preferences.accounts, modelData)
+                label: panel.accountLabel(modelData)
+                checked: panel.preferenceEnabled(panel.preferences.accounts, accountId)
                 onClicked: {
                     var accounts = Object.assign({}, panel.preferences.accounts)
-                    accounts[modelData] = !panel.preferenceEnabled(accounts, modelData)
+                    accounts[accountId] = !panel.preferenceEnabled(accounts, accountId)
                     panel.preferences = Object.assign({}, panel.preferences, { "accounts": accounts })
                     panel.savePreferences()
                     panel.rebuild()

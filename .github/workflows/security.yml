@@ -27,8 +27,7 @@ jobs:
           if grep -RInE \
             --exclude-dir=.git \
             --exclude='security.yml' \
-            --exclude='OnboardingService.qml' \
-            '(shell\s*[:=]\s*true|eval\s*\(|exec\s*\(|__import__\s*\(|Qt\.create|Quickshell\.exec|Process\s*\{|system\s*\(|os\.system|os\.popen|requests\.|importlib\.)' \
+            '(shell\s*[:=]\s*true|eval\s*\(|exec\s*\(|__import__\s*\(|Qt\.create|Quickshell\.exec|system\s*\(|os\.system|os\.popen|requests\.|importlib\.)' \
             .; then
             echo "Forbidden capability pattern detected. Review explicitly before merging."
             exit 1

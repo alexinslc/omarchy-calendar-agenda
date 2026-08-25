@@ -31,6 +31,7 @@ class PackageTests(unittest.TestCase):
             "sync/cli.py",
             "sync/config.py",
             "sync/google.py",
+            "sync/locking.py",
             "sync/registry.py",
             "sync/scheduler.py",
             "sync/status.py",
@@ -108,6 +109,19 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(panel.count("SettingsPanel {"), 1)
         self.assertNotIn("id: settingsColumn", panel)
         self.assertIn('model: ["day", "week", "month"]', panel)
+
+    def test_account_labels_preserve_display_metadata(self) -> None:
+        model = (ROOT / "AgendaModel.js").read_text(encoding="utf-8")
+        panel = (ROOT / "SettingsPanel.qml").read_text(encoding="utf-8")
+        self.assertIn('"displayName": account.displayName', model)
+        self.assertIn("panel.accountLabel(modelData)", panel)
+
+    def test_onboarding_surfaces_structured_errors_and_warnings(self) -> None:
+        service = (ROOT / "OnboardingService.qml").read_text(encoding="utf-8")
+        self.assertIn("property string statusError", service)
+        self.assertIn("property string actionError", service)
+        self.assertIn("function resultDetails(parsed)", service)
+        self.assertIn("parsed.sync.errors", service)
 
 
 if __name__ == "__main__":

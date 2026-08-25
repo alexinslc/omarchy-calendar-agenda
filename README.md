@@ -17,6 +17,8 @@ security boundary.
 - Google access uses the narrow calendar-list and event read-only scopes.
 - OAuth refresh tokens are stored in the Linux Secret Service.
 - Calendar data is cached locally and written atomically.
+- Synchronization and account lifecycle operations share an inter-process lock
+  so timer activity cannot race account removal or reconnect.
 - Production desktop-client configuration is retrieved from one fixed HTTPS
   endpoint and cached under private local permissions; it is never committed.
 - The sync helper will use Python's standard library only.
@@ -126,6 +128,9 @@ cache data, and timer units are cleaned up.
 One broken account does not prevent healthy accounts from synchronizing.
 Settings marks failed accounts as **Needs attention** and provides
 **Reconnect**. **Sync now** refreshes every connected account immediately.
+Reconnect requires the same Google identity for an established account; legacy
+accounts are purged before their identity is replaced. Legacy rows must be
+reconnected before additional accounts can be added.
 
 For diagnostics from the installed plugin directory:
 

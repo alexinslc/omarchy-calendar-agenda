@@ -20,6 +20,10 @@ DEFAULT_CACHE_PATH = (
 CACHE_SCHEMA_VERSION = 1
 
 
+class CacheError(RuntimeError):
+    """Raised when private cache data cannot be safely removed."""
+
+
 def _write_payload(payload: dict[str, Any], path: Path) -> None:
     destination = Path(path)
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -68,18 +72,21 @@ def write_events(
     calendars: Iterable[dict[str, Any]],
 ) -> None:
     """Replace the versioned cache atomically and keep it user-private."""
-    _write_payload(
-        {
-            "schemaVersion": CACHE_SCHEMA_VERSION,
-            "generatedAt": generated_at,
-            "rangeStart": range_start,
-            "rangeEnd": range_end,
-            "accounts": list(accounts),
-            "calendars": list(calendars),
-            "events": list(events),
-        },
-        Path(path),
-    )
+    try:
+        _write_payload(
+            {
+                "schemaVersion": CACHE_SCHEMA_VERSION,
+                "generatedAt": generated_at,
+                "rangeStart": range_start,
+                "rangeEnd": range_end,
+                "accounts": list(accounts),
+                "calendars": list(calendars),
+                "events": list(events),
+            },
+            Path(path),
+        )
+    except OSError as error:
+        raise CacheError(f"cannot write private calendar cache: {error}") from error
 
 
 def purge_account(account_id: str, path: Path = DEFAULT_CACHE_PATH) -> None:
@@ -91,6 +98,8 @@ def purge_account(account_id: str, path: Path = DEFAULT_CACHE_PATH) -> None:
             cache_path.unlink()
         except FileNotFoundError:
             pass
+        except OSError as error:
+            raise CacheError(f"cannot discard unusable calendar cache: {error}") from error
 
     try:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -99,8 +108,8 @@ def purge_account(account_id: str, path: Path = DEFAULT_CACHE_PATH) -> None:
     except json.JSONDecodeError:
         discard_unusable_cache()
         return
-    except OSError:
-        return
+    except OSError as error:
+        raise CacheError(f"cannot read calendar cache for removal: {error}") from error
     if not isinstance(payload, dict) or payload.get("schemaVersion") != CACHE_SCHEMA_VERSION:
         discard_unusable_cache()
         return
@@ -123,4 +132,7 @@ def purge_account(account_id: str, path: Path = DEFAULT_CACHE_PATH) -> None:
         for value in payload["events"]
         if isinstance(value, dict) and value.get("accountId") != account_id
     ]
-    _write_payload(payload, cache_path)
+    try:
+        _write_payload(payload, cache_path)
+    except OSError as error:
+        raise CacheError(f"cannot update calendar cache for removal: {error}") from error

@@ -152,13 +152,14 @@ def fetch_remote_config() -> dict[str, Any]:
 
 
 def _write_cached_config(payload: dict[str, Any], path: Path) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary_path = Path(temporary_name)
+    temporary_path: Path | None = None
     try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o700)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+        )
+        temporary_path = Path(temporary_name)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             os.fchmod(handle.fileno(), 0o600)
             json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))
@@ -166,8 +167,23 @@ def _write_cached_config(payload: dict[str, Any], path: Path) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary_path, path)
+        directory_fd = os.open(
+            path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        )
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        raise ConfigError(f"cannot cache production OAuth configuration: {error}") from error
     finally:
-        temporary_path.unlink(missing_ok=True)
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError as error:
+                raise ConfigError(
+                    f"cannot clean up production OAuth configuration: {error}"
+                ) from error
 
 
 def _cache_is_fresh(path: Path) -> bool:

@@ -87,9 +87,13 @@ Panel {
             root.dataMessage = "Calendar data has expired. Run a sync to refresh it."
             return
         }
-        root.accountOptions = cache.accounts.map(function(account) { return account.id }).sort()
+        root.accountOptions = cache.accounts.slice().sort(function(a, b) {
+            return root.accountLabel(a).localeCompare(root.accountLabel(b))
+        })
         root.calendarOptions = cache.calendars.slice().sort(function(a, b) {
-            var accountOrder = a.accountId.localeCompare(b.accountId)
+            var accountOrder = root.accountLabelForId(a.accountId).localeCompare(
+                root.accountLabelForId(b.accountId)
+            )
             return accountOrder !== 0 ? accountOrder : a.name.localeCompare(b.name)
         })
         root.dataState = "ready"
@@ -109,6 +113,18 @@ Panel {
 
     function preferenceEnabled(map, key) {
         return !map || map[key] !== false
+    }
+
+    function accountLabel(account) {
+        return String(account.email || account.displayName || account.id)
+    }
+
+    function accountLabelForId(accountId) {
+        for (var i = 0; i < root.accountOptions.length; i++) {
+            if (root.accountOptions[i].id === String(accountId))
+                return root.accountLabel(root.accountOptions[i])
+        }
+        return String(accountId)
     }
 
     function savePreferences() {

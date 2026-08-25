@@ -12,7 +12,9 @@ Item {
     property var accounts: []
     property string configurationError: ""
     property string actionStatus: ""
-    property string lastError: ""
+    property string statusError: ""
+    property string actionError: ""
+    readonly property string lastError: actionError || statusError
     property string activeAction: ""
     property string activeAccountId: ""
     property string localRemovalAccountId: ""
@@ -43,6 +45,24 @@ Item {
         }
     }
 
+    function resultDetails(parsed) {
+        if (!parsed || typeof parsed !== "object") return ""
+        var details = []
+        if (parsed.warnings instanceof Array) {
+            for (var i = 0; i < parsed.warnings.length; i++) {
+                if (parsed.warnings[i]) details.push(String(parsed.warnings[i]))
+            }
+        }
+        if (parsed.sync && parsed.sync.errors instanceof Array) {
+            for (var j = 0; j < parsed.sync.errors.length; j++) {
+                var syncError = parsed.sync.errors[j]
+                if (syncError && syncError.message)
+                    details.push(String(syncError.message))
+            }
+        }
+        return root.cleanMessage(details.join(" · "), "")
+    }
+
     function refresh() {
         if (statusProcess.running || actionProcess.running) return
         root._statusOutput = ""
@@ -57,7 +77,7 @@ Item {
         root._actionError = ""
         root.activeAction = name
         root.localRemovalAccountId = ""
-        root.lastError = ""
+        root.actionError = ""
         root.actionStatus = progress
         actionProcess.command = ["/usr/bin/python3", root.helperPath].concat(args)
         actionProcess.running = true
@@ -107,7 +127,7 @@ Item {
             var parsed = root.parseResult(statusStdout.text || root._statusOutput)
             root.loaded = true
             if (!parsed) {
-                root.lastError = root.cleanMessage(
+                root.statusError = root.cleanMessage(
                     statusStderr.text || root._statusError,
                     "Could not read calendar connection status."
                 )
@@ -118,7 +138,14 @@ Item {
             root.cacheAvailable = parsed.cacheAvailable === true
             root.configurationError = String(parsed.configurationError || "")
             root.accounts = parsed.accounts instanceof Array ? parsed.accounts : []
-            if (exitCode === 0) root.lastError = ""
+            if (exitCode !== 0 && !root.configurationError) {
+                root.statusError = root.cleanMessage(
+                    parsed.error || statusStderr.text || root._statusError,
+                    "Could not read calendar connection status."
+                )
+            } else {
+                root.statusError = ""
+            }
         }
     }
 
@@ -141,21 +168,30 @@ Item {
             var completedAccountId = root.activeAccountId
             var parsed = root.parseResult(actionStdout.text || root._actionOutput)
             var ok = exitCode === 0 && parsed && parsed.ok === true
+            var details = root.resultDetails(parsed)
             var message = parsed
-                ? String(parsed.message || parsed.error || "")
+                ? String(parsed.error || parsed.message || "")
                 : root.cleanMessage(
                     actionStderr.text || root._actionError,
                     "Calendar account action failed."
                 )
-            root.actionStatus = ok ? message : ""
-            root.lastError = ok ? "" : root.cleanMessage(message, "Calendar account action failed.")
+            root.actionStatus = ok
+                ? root.cleanMessage(
+                    message + (details ? " · " + details : ""),
+                    "Calendar account action completed."
+                )
+                : ""
+            root.actionError = ok ? "" : root.cleanMessage(
+                (parsed && parsed.error) ? parsed.error : (details || message),
+                "Calendar account action failed."
+            )
             if (completedAction === "remove") {
                 root.localRemovalAccountId = ok ? "" : completedAccountId
             }
             root.activeAction = ""
             root.activeAccountId = ""
             root.cacheChanged()
-            root.actionCompleted(ok, ok ? message : root.lastError)
+            root.actionCompleted(ok, ok ? root.actionStatus : root.actionError)
             Qt.callLater(root.refresh)
         }
     }

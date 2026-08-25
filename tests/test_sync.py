@@ -1,4 +1,6 @@
 import json
+import fcntl
+import os
 import shutil
 import stat
 import subprocess
@@ -6,15 +8,23 @@ import tempfile
 import unittest
 import urllib.parse
 from pathlib import Path
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import sync.config as config_module
-from sync.cache import CACHE_SCHEMA_VERSION, purge_account, write_events
-from sync.cli import _connect_account, _remove_connected_account, main
+from sync.cache import CACHE_SCHEMA_VERSION, CacheError, purge_account, write_events
+from sync.cli import (
+    _connect_account,
+    _reconnect_account,
+    _remove_connected_account,
+    _sync_accounts,
+    main,
+)
 from sync.config import ConfigError, GoogleConfig, load_config
 from sync.google import (
     CALENDAR_ENDPOINT,
     GoogleCalendarClient,
+    GoogleError,
     OAuthError,
     OAuthToken,
     READ_ONLY_SCOPE,
@@ -35,7 +45,8 @@ from sync.registry import (
     load_accounts,
     save_accounts,
 )
-from sync.scheduler import install_timer, remove_timer
+from sync.locking import operation_lock
+from sync.scheduler import SchedulerError, install_timer, remove_timer
 from sync.status import load_sync_status, write_sync_status
 
 
@@ -459,7 +470,8 @@ class CliTests(unittest.TestCase):
             }
         ]
 
-        self.assertEqual(main(["--sync"]), 0)
+        with patch("sync.cli.operation_lock", return_value=nullcontext()):
+            self.assertEqual(main(["--sync"]), 0)
 
         args, kwargs = write_events_mock.call_args
         self.assertEqual(args[0][0]["accountId"], "personal")
@@ -520,6 +532,16 @@ class RegistryTests(unittest.TestCase):
             purge_account("one", path)
             self.assertFalse(path.exists())
 
+    def test_purge_reports_an_unreadable_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.json"
+            path.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(Path, "read_text", side_effect=OSError("denied")),
+                self.assertRaisesRegex(CacheError, "cannot read calendar cache"),
+            ):
+                purge_account("one", path)
+
     def test_sync_health_round_trip_is_private(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sync-status.json"
@@ -553,6 +575,40 @@ class AccountLifecycleTests(unittest.TestCase):
             self.assertEqual(load_accounts(registry)[0].email, "alex@example.com")
             store.save.assert_called_once()
             install_timer_mock.assert_called_once()
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "subject", "email": "alex@example.com", "name": "Alex"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_connect_revokes_new_token_for_duplicate_identity(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            existing = Account("one", "subject", "alex@example.com", "Alex")
+            save_accounts((existing,), registry)
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "already connected"),
+            ):
+                _connect_account(
+                    GoogleConfig("test.apps.googleusercontent.com", "", ()), Mock()
+                )
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.revoke_token")
+    @patch("sync.cli.user_info", side_effect=GoogleError("identity failed"))
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_connect_revokes_new_token_when_identity_lookup_fails(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with self.assertRaisesRegex(GoogleError, "identity failed"):
+            _connect_account(
+                GoogleConfig("test.apps.googleusercontent.com", "", ()), Mock()
+            )
+        revoke_mock.assert_called_once_with("new-token")
 
     @patch("sync.cli._sync_accounts", return_value={"ok": True})
     @patch("sync.cli.remove_timer")
@@ -599,6 +655,108 @@ class AccountLifecycleTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             revoke_mock.assert_not_called()
             store.load.assert_not_called()
+            store.delete.assert_called_once_with("one")
+
+    @patch("sync.cli.purge_account")
+    @patch("sync.cli.revoke_token")
+    def test_local_only_remove_keeps_registry_when_token_cleanup_fails(
+        self, revoke_mock, purge_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            account = Account("one", "subject", "one@example.com", "One")
+            save_accounts((account,), registry)
+            store = Mock()
+            store.delete.side_effect = SecretServiceError("clear failed")
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(SecretServiceError, "clear failed"),
+            ):
+                _remove_connected_account("one", None, store, local_only=True)
+            self.assertEqual(load_accounts(registry), (account,))
+            purge_mock.assert_not_called()
+            revoke_mock.assert_not_called()
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "different", "email": "two@example.com", "name": "Two"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_reconnect_rejects_a_different_google_identity(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            existing = Account("one", "original", "one@example.com", "One")
+            save_accounts((existing,), registry)
+            store = Mock()
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "same Google account"),
+            ):
+                _reconnect_account("one", config, store)
+            self.assertEqual(load_accounts(registry), (existing,))
+            store.save.assert_not_called()
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "new", "email": "new@example.com", "name": "New"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_add_is_blocked_until_legacy_accounts_are_reconnected(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            legacy = Account("old", "legacy:old", "", "old", legacy=True)
+            save_accounts((legacy,), registry)
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "reconnect migrated accounts"),
+            ):
+                _connect_account(config, Mock())
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.write_sync_status")
+    @patch("sync.cli.write_events")
+    @patch("sync.cli.load_sync_status")
+    @patch("sync.cli.refresh_access_token", return_value=OAuthToken("access-token"))
+    def test_failed_account_does_not_publish_partial_calendar_data(
+        self, _refresh, load_status_mock, write_events_mock, write_status_mock
+    ) -> None:
+        load_status_mock.return_value = {
+            "other": {"ok": False, "error": "previous failure"}
+        }
+        account = Account("one", "subject", "one@example.com", "One")
+        other = Account("other", "subject-2", "other@example.com", "Other")
+        store = Mock()
+        store.load.return_value = "refresh-token"
+        client = Mock()
+        client.list_calendars.return_value = [
+            {"id": "first", "summary": "First"},
+            {"id": "second", "summary": "Second"},
+        ]
+        client.list_events.side_effect = [
+            [{"summary": "Partial", "start": {"date": "2026-08-25"}, "end": {"date": "2026-08-26"}}],
+            GoogleError("second calendar failed"),
+        ]
+        with patch("sync.cli.GoogleCalendarClient", return_value=client):
+            result = _sync_accounts(
+                GoogleConfig("test.apps.googleusercontent.com", "", ()),
+                (account,),
+                store,
+                known_accounts=(account, other),
+            )
+        self.assertFalse(result["ok"])
+        write_events_mock.assert_not_called()
+        written_health = write_status_mock.call_args.args[0]
+        self.assertEqual(written_health["one"]["ok"], False)
+        self.assertEqual(written_health["other"]["error"], "previous failure")
 
 
 class SchedulerTests(unittest.TestCase):
@@ -616,6 +774,49 @@ class SchedulerTests(unittest.TestCase):
             remove_timer(units, runner=runner)
             self.assertFalse((units / "omarchy-calendar-agenda-sync.timer").exists())
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+
+    def test_install_enforces_private_existing_unit_directory(self) -> None:
+        def runner(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            units = Path(directory) / "user"
+            units.mkdir(mode=0o755)
+            install_timer(units, runner=runner)
+            self.assertEqual(stat.S_IMODE(units.stat().st_mode), 0o700)
+
+    def test_remove_cleans_files_even_when_disable_fails(self) -> None:
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append(args)
+            if "disable" in args:
+                return subprocess.CompletedProcess(args, 1, stdout="", stderr="failed")
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            units = Path(directory)
+            for name in ("omarchy-calendar-agenda-sync.service", "omarchy-calendar-agenda-sync.timer"):
+                (units / name).write_text("unit", encoding="utf-8")
+            with self.assertRaisesRegex(SchedulerError, "failed"):
+                remove_timer(units, runner=runner)
+            self.assertFalse((units / "omarchy-calendar-agenda-sync.timer").exists())
+            self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+
+
+class LockingTests(unittest.TestCase):
+    def test_operation_lock_is_private_and_exclusive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state" / "operations.lock"
+            with operation_lock(path):
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
+                descriptor = os.open(path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
 
 
 if __name__ == "__main__":

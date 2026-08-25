@@ -10,7 +10,7 @@ from pathlib import Path
 import shutil
 import sys
 
-from .cache import DEFAULT_CACHE_PATH, purge_account, write_events
+from .cache import CacheError, DEFAULT_CACHE_PATH, purge_account, write_events
 from .config import ConfigError, GoogleConfig, load_config
 from .google import (
     GoogleCalendarClient,
@@ -22,6 +22,7 @@ from .google import (
     revoke_token,
     user_info,
 )
+from .locking import OperationLockError, operation_lock
 from .registry import (
     DEFAULT_REGISTRY_PATH,
     Account,
@@ -88,10 +89,28 @@ def _selected_accounts(
     return matches
 
 
+def _revoke_best_effort(refresh_token: str) -> None:
+    try:
+        revoke_token(refresh_token)
+    except GoogleError:
+        pass
+
+
+def _authorized_identity(config: GoogleConfig) -> tuple[str, dict[str, str]]:
+    refresh_token, access_token = authorize(config.client_id, config.client_secret)
+    try:
+        return refresh_token, user_info(access_token.access_token)
+    except GoogleError:
+        _revoke_best_effort(refresh_token)
+        raise
+
+
 def _sync_accounts(
     config: GoogleConfig | None,
     accounts: tuple[Account, ...],
     store: SecretToolStore,
+    *,
+    known_accounts: tuple[Account, ...] | None = None,
 ) -> dict[str, object]:
     if accounts and config is None:
         raise ConfigError("Google OAuth configuration is required to synchronize accounts")
@@ -99,12 +118,20 @@ def _sync_accounts(
     cache_accounts: list[dict[str, object]] = []
     cache_calendars: list[dict[str, str]] = []
     errors: list[dict[str, str]] = []
-    health: dict[str, dict[str, object]] = {}
+    known = known_accounts if known_accounts is not None else accounts
+    known_ids = {account.id for account in known}
+    health = {
+        account_id: value
+        for account_id, value in load_sync_status(DEFAULT_STATUS_PATH).items()
+        if account_id in known_ids
+    }
     now = datetime.now(timezone.utc)
     time_min = now.isoformat().replace("+00:00", "Z")
     time_max = (now + timedelta(days=28)).isoformat().replace("+00:00", "Z")
 
     for account in accounts:
+        account_events: list[dict[str, object]] = []
+        account_calendars: list[dict[str, str]] = []
         try:
             assert config is not None
             token = refresh_access_token(
@@ -114,13 +141,6 @@ def _sync_accounts(
             )
             client = GoogleCalendarClient(token.access_token)
             calendars = client.list_calendars()
-            cache_accounts.append(
-                {
-                    "id": account.id,
-                    "email": account.email,
-                    "displayName": account.display_name,
-                }
-            )
             for calendar in calendars:
                 calendar_id = calendar.get("id")
                 if not isinstance(calendar_id, str) or not calendar_id:
@@ -131,7 +151,7 @@ def _sync_accounts(
                 calendar_color = calendar.get("backgroundColor", "")
                 if not isinstance(calendar_color, str):
                     calendar_color = ""
-                cache_calendars.append(
+                account_calendars.append(
                     {
                         "accountId": account.id,
                         "id": calendar_id,
@@ -152,7 +172,16 @@ def _sync_accounts(
                         calendar_color=calendar_color,
                     )
                     if normalized is not None:
-                        events.append(normalized)
+                        account_events.append(normalized)
+            cache_accounts.append(
+                {
+                    "id": account.id,
+                    "email": account.email,
+                    "displayName": account.display_name,
+                }
+            )
+            cache_calendars.extend(account_calendars)
+            events.extend(account_events)
             health[account.id] = {"ok": True, "error": ""}
         except GoogleError as error:
             errors.append({"accountId": account.id, "message": str(error)})
@@ -200,13 +229,17 @@ def _status(config_error: str = "") -> dict[str, object]:
 
 
 def _connect_account(config: GoogleConfig, store: SecretToolStore) -> dict[str, object]:
-    refresh_token, access_token = authorize(config.client_id, config.client_secret)
-    identity = user_info(access_token.access_token)
+    refresh_token, identity = _authorized_identity(config)
     account = new_account(identity["sub"], identity["email"], identity["name"])
+    existing_accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    if any(existing.legacy for existing in existing_accounts):
+        _revoke_best_effort(refresh_token)
+        raise RegistryError("reconnect migrated accounts before adding another account")
     if any(
         existing.provider_subject == account.provider_subject
-        for existing in load_accounts(DEFAULT_REGISTRY_PATH)
+        for existing in existing_accounts
     ):
+        _revoke_best_effort(refresh_token)
         raise RegistryError(f"Google account is already connected: {account.email}")
     store.save(account.id, refresh_token)
     try:
@@ -222,7 +255,10 @@ def _connect_account(config: GoogleConfig, store: SecretToolStore) -> dict[str, 
         install_timer()
     except SchedulerError as error:
         warnings.append(f"background sync could not be enabled: {error}")
-    sync_result = _sync_accounts(config, load_accounts(DEFAULT_REGISTRY_PATH), store)
+    connected_accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    sync_result = _sync_accounts(
+        config, connected_accounts, store, known_accounts=connected_accounts
+    )
     if not sync_result["ok"]:
         warnings.append("account connected, but the first calendar sync failed")
     return {
@@ -241,14 +277,24 @@ def _reconnect_account(
     existing = next((account for account in accounts if account.id == account_id), None)
     if existing is None:
         raise RegistryError(f"account is not connected: {account_id}")
-    refresh_token, access_token = authorize(config.client_id, config.client_secret)
-    identity = user_info(access_token.access_token)
+    refresh_token, identity = _authorized_identity(config)
     replacement = Account(
         id=existing.id,
         provider_subject=identity["sub"],
         email=identity["email"],
         display_name=identity["name"],
     )
+    if not existing.legacy and existing.provider_subject != replacement.provider_subject:
+        _revoke_best_effort(refresh_token)
+        raise RegistryError(
+            f"reconnect {existing.email or existing.display_name} using the same Google account"
+        )
+    if existing.legacy:
+        try:
+            purge_account(existing.id)
+        except CacheError:
+            _revoke_best_effort(refresh_token)
+            raise
     try:
         previous_token = store.load(existing.id)
     except GoogleError:
@@ -264,12 +310,20 @@ def _reconnect_account(
                 store.delete(existing.id)
             except GoogleError:
                 pass
+        _revoke_best_effort(refresh_token)
         raise
-    result = _sync_accounts(config, load_accounts(DEFAULT_REGISTRY_PATH), store)
+    connected_accounts = load_accounts(DEFAULT_REGISTRY_PATH)
+    result = _sync_accounts(
+        config, connected_accounts, store, known_accounts=connected_accounts
+    )
+    warnings = [] if result["ok"] else [
+        "account reconnected, but calendar synchronization failed"
+    ]
     return {
-        "ok": bool(result["ok"]),
+        "ok": True,
         "message": f"Reconnected {replacement.email}",
         "account": replacement.public_dict(),
+        "warnings": warnings,
         "sync": result,
     }
 
@@ -287,21 +341,19 @@ def _remove_connected_account(
         raise RegistryError(f"account is not connected: {account_id}")
     if not local_only:
         revoke_token(store.load(account_id))
-    try:
-        store.delete(account_id)
-    except GoogleError:
-        if not local_only:
-            raise
-    removed = remove_account(account_id, DEFAULT_REGISTRY_PATH)
+    store.delete(account_id)
     purge_account(account_id)
+    removed = remove_account(account_id, DEFAULT_REGISTRY_PATH)
     remaining = load_accounts(DEFAULT_REGISTRY_PATH)
     warnings: list[str] = []
     if remaining and config is not None:
-        result = _sync_accounts(config, remaining, store)
+        result = _sync_accounts(
+            config, remaining, store, known_accounts=remaining
+        )
         if not result["ok"]:
             warnings.append("account removed, but remaining accounts did not fully sync")
     elif not remaining:
-        result = _sync_accounts(config, (), store)
+        result = _sync_accounts(config, (), store, known_accounts=())
         try:
             remove_timer()
         except SchedulerError as error:
@@ -329,9 +381,7 @@ def _emit(payload: dict[str, object], *, json_output: bool) -> None:
         print(message)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    logging.basicConfig(level=logging.WARNING)
+def _main_locked(args: argparse.Namespace) -> int:
     structured = bool(
         args.json
         or args.status
@@ -393,8 +443,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             assert config is not None
+            if args.account:
+                raise RegistryError("--account is only supported with --authorize")
             selected = _selected_accounts(accounts, args.account)
-            payload = _sync_accounts(config, selected, store)
+            payload = _sync_accounts(
+                config, selected, store, known_accounts=accounts
+            )
             payload["message"] = (
                 "Calendar sync completed"
                 if payload["ok"]
@@ -402,7 +456,36 @@ def main(argv: list[str] | None = None) -> int:
             )
         _emit(payload, json_output=structured)
         return 0 if payload.get("ok") else 1
-    except (ConfigError, RegistryError, GoogleError, SchedulerError) as error:
+    except (
+        CacheError,
+        ConfigError,
+        GoogleError,
+        OperationLockError,
+        RegistryError,
+        SchedulerError,
+    ) as error:
+        if structured:
+            _emit({"ok": False, "error": str(error)}, json_output=True)
+        else:
+            print(f"calendar sync failed: {error}", file=sys.stderr)
+        return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    logging.basicConfig(level=logging.WARNING)
+    try:
+        with operation_lock():
+            return _main_locked(args)
+    except OperationLockError as error:
+        structured = bool(
+            args.json
+            or args.status
+            or args.doctor
+            or args.add_account
+            or args.remove_account
+            or args.reconnect_account
+        )
         if structured:
             _emit({"ok": False, "error": str(error)}, json_output=True)
         else:

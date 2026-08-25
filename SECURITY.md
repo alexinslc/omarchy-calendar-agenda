@@ -24,6 +24,8 @@ removed.
 - Network destinations must be fixed Google HTTPS endpoints plus the exact
   production configuration endpoint on `calendar.alexinslc.com`.
 - Event content is untrusted input and must be rendered as plain text.
+- Sync, connect, reconnect, and removal operations hold one private
+  inter-process lock so a background timer cannot restore data after removal.
 - Event links may only be opened after an explicit user action and must use
   HTTPS.
 - No shell execution, arbitrary URL fetching, dynamic code loading, or
@@ -53,7 +55,9 @@ malformed, expired, or unsupported data.
 
 Removing an account revokes its Google grant when reachable, clears its Secret
 Service entry, and purges its cached data. A user may explicitly choose local
-removal when remote revocation is unavailable.
+removal when remote revocation is unavailable. Local removal fails visibly if
+Secret Service or cache cleanup cannot be confirmed; it never reports success
+while a refresh token or readable cached account data may remain.
 
 Marketplace verification is an additional provenance check, not a substitute
 for source review or a complete security audit.
