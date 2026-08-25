@@ -104,7 +104,8 @@ and sync fail clearly; there is no plaintext fallback. Use
 `--disconnect --account personal` to revoke and remove a stored token.
 
 The helper lists every calendar for every configured account, follows API
-pagination, and normalizes Google events to the existing QML contract:
+pagination, and synchronizes events from the current moment through the next
+28 days. It normalizes Google events to the existing QML contract:
 `title`, `start`, `end`, `allDay`, and `location`. Canceled events are omitted
 and missing Google summaries are represented explicitly as `(untitled event)`.
 The cache is written atomically, with mode `0600`, at:

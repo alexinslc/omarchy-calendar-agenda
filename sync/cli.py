@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 import logging
 import sys
 from pathlib import Path
@@ -61,6 +62,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         events: list[dict[str, object]] = []
+        now = datetime.now(timezone.utc)
+        time_min = now.isoformat().replace("+00:00", "Z")
+        time_max = (now + timedelta(days=28)).isoformat().replace(
+            "+00:00", "Z"
+        )
         for account_id in accounts:
             token = refresh_access_token(
                 config.client_id,
@@ -72,7 +78,11 @@ def main(argv: list[str] | None = None) -> int:
                 calendar_id = calendar.get("id")
                 if not isinstance(calendar_id, str) or not calendar_id:
                     raise GoogleError("Google calendar list contained an invalid calendar ID")
-                for event in client.list_events(calendar_id):
+                for event in client.list_events(
+                    calendar_id,
+                    time_min=time_min,
+                    time_max=time_max,
+                ):
                     normalized = normalize_event(
                         event,
                         account_id=account_id,
