@@ -2,6 +2,8 @@ import json
 import unittest
 from pathlib import Path
 
+from sync.cache import CACHE_SCHEMA_VERSION
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,7 +37,7 @@ class PackageTests(unittest.TestCase):
         fixture = json.loads(
             (ROOT / "fixtures" / "events.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(fixture["schemaVersion"], 1)
+        self.assertEqual(fixture["schemaVersion"], CACHE_SCHEMA_VERSION)
         self.assertIsInstance(fixture["accounts"], list)
         self.assertIsInstance(fixture["calendars"], list)
         self.assertIsInstance(fixture["events"], list)
