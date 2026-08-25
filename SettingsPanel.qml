@@ -74,7 +74,7 @@ Flickable {
         }
 
         Text {
-            text: "SYNC EVERY"
+            text: "TIME FORMAT"
             color: panel.accentForeground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -144,6 +144,15 @@ Flickable {
                     panel.rebuild()
                 }
             }
+        }
+
+        Text {
+            text: "SYNC EVERY"
+            color: panel.accentForeground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
         }
 
         ButtonGroup {
