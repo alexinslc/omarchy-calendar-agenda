@@ -234,7 +234,6 @@ Panel {
                         font.family: Style.font.family
                         font.pixelSize: Style.font.bodySmall
                         font.bold: true
-                        anchors.verticalCenter: parent.verticalCenter
                     }
 
                     Button {
