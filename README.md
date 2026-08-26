@@ -13,6 +13,16 @@ The same agenda under three Omarchy themes. Colors, borders, type, and the
 surrounding desktop all follow the active theme; the calendar stays where an
 Omarchy utility belongs, directly beneath its bar icon.
 
+## See it in action
+
+<p align="center">
+  <a href="https://youtu.be/VsQA0hfj4d4">
+    <img src="https://img.youtube.com/vi/VsQA0hfj4d4/maxresdefault.jpg" alt="Watch the Omarchy Calendar Agenda Plugin demo" width="720">
+  </a>
+</p>
+
+<p align="center"><a href="https://youtu.be/VsQA0hfj4d4"><strong>▶ Watch the demo on YouTube</strong></a></p>
+
 ## Install
 
 ```bash
