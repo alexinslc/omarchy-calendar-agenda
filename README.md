@@ -22,6 +22,21 @@ omarchy plugin add https://github.com/alexinslc/omarchy-calendar-agenda.git --en
 The calendar icon lands in the right section of the bar. Move it with
 `omarchy bar move`, or from the bar's own settings panel.
 
+### Requirements
+
+Calendar Agenda targets Omarchy Quattro and relies only on components present
+in a standard Omarchy installation:
+
+- Python 3 and its standard library for OAuth and calendar synchronization;
+- `secret-tool`/Linux Secret Service for refresh-token storage;
+- the systemd user manager for the 15-minute background timer; and
+- a system browser plus outbound HTTPS access to Google and
+  `calendar.alexinslc.com` for authorization, synchronization, and retrieval
+  of the distributable desktop OAuth configuration.
+
+There are no third-party Python modules, npm packages, privileged services, or
+install scripts.
+
 Open the icon and choose **Connect Google Calendar**. Sign in through Google's
 page in your browser, approve read-only calendar access, and return to the
 panel. Calendar Agenda stores the refresh token in Linux Secret Service,
