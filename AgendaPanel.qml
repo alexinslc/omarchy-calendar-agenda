@@ -13,6 +13,7 @@ Panel {
 
     property var anchorItem: null
     property var hostWidget: null
+    readonly property var barIdentity: hostWidget || root
     property date anchorDate: new Date()
     property string viewMode: "day"
     property var events: []
@@ -216,6 +217,12 @@ Panel {
         else root.open()
     }
 
+    function switchPanel(direction) {
+        if (root.bar && typeof root.bar.switchPanelFrom === "function")
+            return root.bar.switchPanelFrom(root.barIdentity, direction)
+        return false
+    }
+
     FileView {
         id: settingsFile
         path: root.settingsPath
@@ -276,6 +283,7 @@ Panel {
             }
             onActivateRequested: root.goToToday()
             onCloseRequested: root.close()
+            onTabRequested: function(direction) { root.switchPanel(direction) }
             onTextKey: function(text) {
                 if (text === "[" || text === "{") root.move(-1)
                 else if (text === "]" || text === "}") root.move(1)
