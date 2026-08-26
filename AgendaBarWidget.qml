@@ -15,6 +15,9 @@ BarWidget {
     }
 
     readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+    readonly property bool popoutSwitchClosing: panelLoader.item
+        ? panelLoader.item.popoutSwitchClosing === true
+        : false
 
     function open() {
         if (panelLoader.item) panelLoader.item.open()
@@ -22,6 +25,10 @@ BarWidget {
 
     function close() {
         if (panelLoader.item) panelLoader.item.close()
+    }
+
+    function closeForPopoutSwitch() {
+        if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
     }
 
     function toggle() {
@@ -40,7 +47,10 @@ BarWidget {
         active: true
         source: Qt.resolvedUrl("AgendaPanel.qml")
         visible: false
-        onLoaded: root.injectPanel()
+        onLoaded: {
+            root.injectPanel()
+            Qt.callLater(root.injectPanel)
+        }
     }
 
     BarIconButton {

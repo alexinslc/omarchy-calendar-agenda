@@ -13,6 +13,9 @@ class PackageTests(unittest.TestCase):
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["schemaVersion"], 1)
         self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertEqual(manifest["license"], "MIT")
+        self.assertTrue((ROOT / "LICENSE").is_file())
+        self.assertTrue((ROOT / "preview.png").is_file())
         self.assertEqual(
             manifest["entryPoints"]["barWidget"],
             "AgendaBarWidget.qml",
@@ -109,6 +112,14 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(panel.count("SettingsPanel {"), 1)
         self.assertNotIn("id: settingsColumn", panel)
         self.assertIn('model: ["day", "week", "month"]', panel)
+
+    def test_agenda_implements_the_bar_panel_handoff_contract(self) -> None:
+        widget = (ROOT / "AgendaBarWidget.qml").read_text(encoding="utf-8")
+        panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
+        self.assertIn("readonly property bool popoutSwitchClosing", widget)
+        self.assertIn("function closeForPopoutSwitch()", widget)
+        self.assertIn("readonly property var barIdentity: hostWidget || root", panel)
+        self.assertIn("onTabRequested:", panel)
 
     def test_account_labels_preserve_display_metadata(self) -> None:
         model = (ROOT / "AgendaModel.js").read_text(encoding="utf-8")

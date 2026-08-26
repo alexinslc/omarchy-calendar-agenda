@@ -244,3 +244,9 @@ Push a tag matching the version in `manifest.json`, such as `v0.2.0`, to run
 the release workflow. It validates the project, builds a source archive,
 generates SHA-256 checksums and an SPDX JSON SBOM, creates a GitHub release,
 and records build provenance for the archive and checksums.
+
+## License
+
+Calendar Agenda is available under the [MIT License](LICENSE). It retains the
+upstream Omarchy attribution because its bar-widget structure was originally
+prototyped from Omarchy's built-in clock plugin.

@@ -4,6 +4,7 @@
   "name": "Calendar Agenda",
   "version": "0.2.0",
   "author": "Alex Inslee",
+  "license": "MIT",
   "description": "A private, read-only Google Calendar agenda with guided account setup.",
   "kinds": [
     "bar-widget"
