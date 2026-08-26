@@ -111,6 +111,12 @@ class PackageTests(unittest.TestCase):
         self.assertNotIn("frame-src https://www.youtube.com", headers)
         self.assertIn("privacy-enhanced embed", privacy)
 
+    def test_not_found_page_overrides_prose_page_padding(self) -> None:
+        not_found = (ROOT / "site" / "404.html").read_text(encoding="utf-8")
+        styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('class="prose not-found"', not_found)
+        self.assertRegex(styles, r"\.not-found\s*\{[^}]*padding-block:\s*0;")
+
     def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["assets"]["directory"], "./site")
