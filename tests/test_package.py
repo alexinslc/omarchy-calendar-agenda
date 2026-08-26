@@ -109,6 +109,15 @@ class PackageTests(unittest.TestCase):
             encoding="utf-8"
         ).lower())
 
+    def test_public_site_matches_the_readme_product_story(self) -> None:
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("The same agenda under every Omarchy theme.", homepage)
+        self.assertIn("One command. Then connect Google.", homepage)
+        self.assertIn("Remove an account from Settings", homepage)
+        self.assertIn("Read-only. Local-first.", homepage)
+        self.assertNotIn("No mockups. No imaginary UI.", homepage)
+        self.assertNotIn("How it works", homepage)
+
     def test_public_site_embeds_demo_with_a_narrow_csp_exception(self) -> None:
         homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
         headers = (ROOT / "site" / "_headers").read_text(encoding="utf-8")
