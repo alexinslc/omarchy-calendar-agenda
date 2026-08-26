@@ -44,7 +44,7 @@ a {
 }
 
 a:hover { color: var(--bright); }
-img { display: block; max-width: 100%; }
+img { display: block; max-width: 100%; height: auto; }
 .shell { width: min(calc(100% - 2.5rem), var(--max-width)); margin-inline: auto; }
 
 header {
@@ -115,7 +115,7 @@ nav { min-height: 4.75rem; display: flex; align-items: center; justify-content: 
   background-image:
     linear-gradient(90deg, rgba(16, 16, 24, 0.96) 0%, rgba(16, 16, 24, 0.78) 43%, rgba(16, 16, 24, 0.18) 74%),
     linear-gradient(0deg, var(--night) 0%, rgba(26, 27, 38, 0.08) 30%, rgba(16, 16, 24, 0.18) 100%),
-    url("/assets/quattro.jpg");
+    url("/assets/tokyo-night-car.jpg");
   background-position: center, center, center;
   background-size: cover;
 }
@@ -198,7 +198,7 @@ h3 { margin-bottom: 0.7rem; font-size: 1.08rem; letter-spacing: -0.02em; }
   box-shadow: 0 0 0 1px rgba(247, 118, 142, 0.25), -1.2rem 1.2rem 0 rgba(187, 154, 247, 0.12), 0 2rem 5rem rgba(0, 0, 0, 0.52);
   transform: rotate(0.7deg);
 }
-.shot-frame img { width: 100%; border-radius: 0.16rem; }
+.shot-frame img { width: 100%; height: auto; aspect-ratio: 23 / 27; object-fit: contain; border-radius: 0.16rem; }
 .hero-product figcaption { margin-top: 1.1rem; color: var(--text); font-size: 0.67rem; letter-spacing: 0.035em; text-align: right; text-shadow: 0 0.15rem 0.75rem rgba(0, 0, 0, 0.8); }
 .hero-product figcaption span { margin-right: 0.6rem; color: var(--green); font-weight: 800; }
 
@@ -223,7 +223,7 @@ main > .shell { padding-bottom: 7rem; }
 .product-gallery { display: grid; grid-template-columns: 1.18fr 0.91fr 0.91fr; align-items: start; gap: 1rem; }
 .product-card { overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 0.35rem; background: var(--night-deep); box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.22); }
 .product-card a { display: block; overflow: hidden; background: var(--storm); }
-.product-card img { width: 100%; transition: transform 280ms ease, filter 280ms ease; }
+.product-card img { width: 100%; height: auto; aspect-ratio: 23 / 27; object-fit: contain; transition: transform 280ms ease, filter 280ms ease; }
 .product-card a:hover img { transform: scale(1.018); filter: brightness(1.06); }
 .product-card figcaption { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border-top: 1px solid var(--line); font-size: 0.7rem; }
 .product-card figcaption strong { color: var(--bright); font-size: 0.76rem; text-transform: uppercase; }

@@ -34,8 +34,8 @@ The calendar icon lands in the right section of the bar. Move it with
 
 ### Requirements
 
-Calendar Agenda targets Omarchy Quattro and relies only on components present
-in a standard Omarchy installation:
+Calendar Agenda relies only on components present in a standard Omarchy
+installation:
 
 - Python 3 and its standard library for OAuth and calendar synchronization;
 - `secret-tool`/Linux Secret Service for refresh-token storage;

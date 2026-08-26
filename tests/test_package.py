@@ -97,7 +97,17 @@ class PackageTests(unittest.TestCase):
                 (ROOT / "site" / "assets" / filename).read_bytes(),
                 (ROOT / "screenshots" / filename).read_bytes(),
             )
-        self.assertTrue((ROOT / "site" / "assets" / "quattro.jpg").is_file())
+        self.assertTrue(
+            (ROOT / "site" / "assets" / "tokyo-night-car.jpg").is_file()
+        )
+
+    def test_public_site_preserves_product_capture_aspect_ratio(self) -> None:
+        styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("img { display: block; max-width: 100%; height: auto; }", styles)
+        self.assertIn("aspect-ratio: 23 / 27; object-fit: contain;", styles)
+        self.assertNotIn("quattro", (ROOT / "site" / "index.html").read_text(
+            encoding="utf-8"
+        ).lower())
 
     def test_public_site_embeds_demo_with_a_narrow_csp_exception(self) -> None:
         homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
