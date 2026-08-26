@@ -84,6 +84,39 @@ class PackageTests(unittest.TestCase):
         self.assertIn('href="/privacy/"', homepage)
         self.assertIn("Google API Services User Data Policy", privacy)
 
+    def test_public_site_uses_real_sanitized_product_captures(self) -> None:
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("agenda-window", homepage)
+        for filename in (
+            "tokyo-night-week.png",
+            "catppuccin-latte-day.png",
+            "matte-black-month.png",
+        ):
+            self.assertIn(f'/assets/{filename}', homepage)
+            self.assertEqual(
+                (ROOT / "site" / "assets" / filename).read_bytes(),
+                (ROOT / "screenshots" / filename).read_bytes(),
+            )
+        self.assertTrue((ROOT / "site" / "assets" / "quattro.jpg").is_file())
+
+    def test_public_site_embeds_demo_with_a_narrow_csp_exception(self) -> None:
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        headers = (ROOT / "site" / "_headers").read_text(encoding="utf-8")
+        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        embed_origin = "https://www.youtube-nocookie.com"
+        self.assertIn(f'{embed_origin}/embed/VsQA0hfj4d4', homepage)
+        self.assertIn(f"frame-src {embed_origin};", headers)
+        self.assertNotIn("frame-src https://www.youtube.com", headers)
+        self.assertIn("privacy-enhanced embed", privacy)
+
+    def test_not_found_page_overrides_prose_page_padding(self) -> None:
+        not_found = (ROOT / "site" / "404.html").read_text(encoding="utf-8")
+        styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('class="prose not-found"', not_found)
+        self.assertRegex(styles, r"\.not-found\s*\{[^}]*padding-block:\s*0;")
+
     def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["assets"]["directory"], "./site")
