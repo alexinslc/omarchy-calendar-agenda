@@ -99,6 +99,18 @@ class PackageTests(unittest.TestCase):
             )
         self.assertTrue((ROOT / "site" / "assets" / "quattro.jpg").is_file())
 
+    def test_public_site_embeds_demo_with_a_narrow_csp_exception(self) -> None:
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        headers = (ROOT / "site" / "_headers").read_text(encoding="utf-8")
+        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        embed_origin = "https://www.youtube-nocookie.com"
+        self.assertIn(f'{embed_origin}/embed/VsQA0hfj4d4', homepage)
+        self.assertIn(f"frame-src {embed_origin};", headers)
+        self.assertNotIn("frame-src https://www.youtube.com", headers)
+        self.assertIn("privacy-enhanced embed", privacy)
+
     def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["assets"]["directory"], "./site")
