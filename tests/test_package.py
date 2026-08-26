@@ -84,6 +84,21 @@ class PackageTests(unittest.TestCase):
         self.assertIn('href="/privacy/"', homepage)
         self.assertIn("Google API Services User Data Policy", privacy)
 
+    def test_public_site_uses_real_sanitized_product_captures(self) -> None:
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("agenda-window", homepage)
+        for filename in (
+            "tokyo-night-week.png",
+            "catppuccin-latte-day.png",
+            "matte-black-month.png",
+        ):
+            self.assertIn(f'/assets/{filename}', homepage)
+            self.assertEqual(
+                (ROOT / "site" / "assets" / filename).read_bytes(),
+                (ROOT / "screenshots" / filename).read_bytes(),
+            )
+        self.assertTrue((ROOT / "site" / "assets" / "quattro.jpg").is_file())
+
     def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["assets"]["directory"], "./site")
