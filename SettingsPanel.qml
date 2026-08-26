@@ -6,6 +6,8 @@ import qs.Ui
 Flickable {
     id: root
     property var panel
+    property var onboarding
+    property string pendingRemovalId: ""
     anchors.fill: parent
     anchors.margins: Style.space(16)
     enabled: panel.preferencesLoaded
@@ -50,6 +52,167 @@ Flickable {
                 verticalPadding: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: panel.settingsOpen = false
+            }
+        }
+
+        Text {
+            text: "CONNECTED ACCOUNTS"
+            color: panel.accentForeground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
+        }
+
+        Text {
+            visible: onboarding.actionStatus !== "" || onboarding.lastError !== ""
+            width: root.width
+            text: onboarding.lastError !== "" ? onboarding.lastError : onboarding.actionStatus
+            color: onboarding.lastError !== "" ? panel.accentForeground : panel.mutedForeground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.Wrap
+        }
+
+        Button {
+            visible: onboarding.localRemovalAccountId !== ""
+            text: "Remove locally anyway"
+            bordered: true
+            enabled: !onboarding.busy
+            horizontalPadding: Style.space(8)
+            verticalPadding: Style.space(4)
+            onClicked: onboarding.removeAccount(onboarding.localRemovalAccountId, true)
+        }
+
+        Row {
+            width: root.width
+            spacing: Style.space(6)
+
+            Button {
+                text: onboarding.busy ? "Working…" : "Add account"
+                bordered: true
+                enabled: onboarding.configured && onboarding.secretServiceAvailable && !onboarding.busy
+                horizontalPadding: Style.space(8)
+                verticalPadding: Style.space(4)
+                onClicked: onboarding.addAccount()
+            }
+
+            Button {
+                text: "Sync now"
+                bordered: true
+                enabled: !onboarding.busy && onboarding.accounts.length > 0
+                horizontalPadding: Style.space(8)
+                verticalPadding: Style.space(4)
+                onClicked: onboarding.syncNow()
+            }
+        }
+
+        Repeater {
+            model: onboarding.accounts
+            delegate: Rectangle {
+                required property var modelData
+                width: root.width
+                height: accountColumn.implicitHeight + Style.space(16)
+                radius: Style.cornerRadius
+                color: Qt.rgba(panel.contentForeground.r, panel.contentForeground.g, panel.contentForeground.b, 0.07)
+
+                Column {
+                    id: accountColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: Style.space(8)
+                    spacing: Style.space(5)
+
+                    Text {
+                        width: parent.width
+                        text: modelData.email || modelData.displayName || modelData.id
+                        color: panel.contentForeground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.body
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        visible: modelData.legacy === true
+                        width: parent.width
+                        text: "Reconnect once to finish account migration."
+                        color: panel.accentForeground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        wrapMode: Text.Wrap
+                    }
+
+                    Text {
+                        visible: modelData.state === "needs-attention"
+                        width: parent.width
+                        text: "Needs attention  ·  " + String(modelData.lastError || "Reconnect this account.")
+                        color: panel.accentForeground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        wrapMode: Text.Wrap
+                    }
+
+                    Row {
+                        spacing: Style.space(6)
+                        visible: root.pendingRemovalId !== modelData.id
+
+                        Button {
+                            text: "Reconnect"
+                            bordered: true
+                            enabled: !onboarding.busy
+                            horizontalPadding: Style.space(7)
+                            verticalPadding: Style.space(3)
+                            onClicked: onboarding.reconnectAccount(modelData.id)
+                        }
+
+                        Button {
+                            text: "Remove"
+                            bordered: true
+                            enabled: !onboarding.busy
+                            horizontalPadding: Style.space(7)
+                            verticalPadding: Style.space(3)
+                            onClicked: root.pendingRemovalId = modelData.id
+                        }
+                    }
+
+                    Text {
+                        visible: root.pendingRemovalId === modelData.id
+                        width: parent.width
+                        text: "Remove this plugin’s access and cached events? Nothing in Google Calendar will be deleted."
+                        color: panel.contentForeground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        wrapMode: Text.Wrap
+                    }
+
+                    Row {
+                        spacing: Style.space(6)
+                        visible: root.pendingRemovalId === modelData.id
+
+                        Button {
+                            text: "Confirm remove"
+                            bordered: true
+                            enabled: !onboarding.busy
+                            horizontalPadding: Style.space(7)
+                            verticalPadding: Style.space(3)
+                            onClicked: {
+                                root.pendingRemovalId = ""
+                                onboarding.removeAccount(modelData.id, false)
+                            }
+                        }
+
+                        Button {
+                            text: "Cancel"
+                            bordered: true
+                            enabled: !onboarding.busy
+                            horizontalPadding: Style.space(7)
+                            verticalPadding: Style.space(3)
+                            onClicked: root.pendingRemovalId = ""
+                        }
+                    }
+                }
             }
         }
 
@@ -113,7 +276,7 @@ Flickable {
                 required property var modelData
                 readonly property string preferenceKey: modelData.accountId + "::" + modelData.id
                 width: root.width
-                label: modelData.name + "  ·  " + modelData.accountId
+                label: modelData.name + "  ·  " + panel.accountLabelForId(modelData.accountId)
                 checked: panel.calendarEnabledFor(modelData.accountId, modelData.id)
                 onClicked: {
                     var calendars = Object.assign({}, panel.preferences.calendars)
@@ -126,7 +289,7 @@ Flickable {
         }
 
         Text {
-            text: "ACCOUNTS"
+            text: "ACCOUNT VISIBILITY"
             color: panel.accentForeground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -137,13 +300,14 @@ Flickable {
         Repeater {
             model: panel.accountOptions
             delegate: CompactToggle {
-                required property string modelData
+                required property var modelData
+                readonly property string accountId: String(modelData.id)
                 width: root.width
-                label: modelData
-                checked: panel.preferenceEnabled(panel.preferences.accounts, modelData)
+                label: panel.accountLabel(modelData)
+                checked: panel.preferenceEnabled(panel.preferences.accounts, accountId)
                 onClicked: {
                     var accounts = Object.assign({}, panel.preferences.accounts)
-                    accounts[modelData] = !panel.preferenceEnabled(accounts, modelData)
+                    accounts[accountId] = !panel.preferenceEnabled(accounts, accountId)
                     panel.preferences = Object.assign({}, panel.preferences, { "accounts": accounts })
                     panel.savePreferences()
                     panel.rebuild()

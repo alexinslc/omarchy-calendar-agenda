@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A private, read-only Google Calendar agenda for the Omarchy desktop.">
+    <meta name="theme-color" content="#1a1b26">
+    <link rel="canonical" href="https://calendar.alexinslc.com/">
+    <link rel="stylesheet" href="/styles.css">
+    <title>Calendar Agenda for Omarchy</title>
+  </head>
+  <body>
+    <header>
+      <nav class="shell" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <span><b>OMARCHY</b> / CALENDAR AGENDA</span>
+        </a>
+        <div class="nav-links">
+          <a href="#privacy">Data practices</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="https://github.com/alexinslc/omarchy-calendar-agenda">Source</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-content">
+          <p class="plugin-badge"><span>OMARCHY</span> DESKTOP PLUGIN</p>
+          <h1>Your day,<br><span>at a glance.</span></h1>
+          <p class="hero-copy">Calendar Agenda puts a focused, read-only Google Calendar view directly in your Omarchy bar. Your accounts, your machine, no extra noise.</p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/alexinslc/omarchy-calendar-agenda#installation">Install plugin <span aria-hidden="true">↗</span></a>
+            <a class="button" href="/privacy/">Privacy</a>
+          </div>
+        </div>
+
+        <div class="agenda-window" aria-label="Example Calendar Agenda view">
+          <div class="window-bar">
+            <span class="window-title">omarchy/calendar-agenda</span>
+            <span class="window-status"><i></i> synced</span>
+          </div>
+          <div class="calendar-head">
+            <div>
+              <span class="calendar-kicker">MONDAY</span>
+              <strong>AUG 24</strong>
+            </div>
+            <span class="weather" aria-hidden="true">DEN · 72°</span>
+          </div>
+          <ol class="mini-agenda">
+            <li><time>09:00</time><span class="event-dot blue"></span><div><strong>Design review</strong><small>Studio · 45 min</small></div></li>
+            <li><time>11:30</time><span class="event-dot orange"></span><div><strong>Lunch with Maya</strong><small>Central Market</small></div></li>
+            <li><time>14:00</time><span class="event-dot purple"></span><div><strong>Focus block</strong><small>Project Atlas · 2 hr</small></div></li>
+          </ol>
+          <div class="window-command"><span>$</span> agenda --today <i>█</i></div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="Privacy summary">
+        <div><b>01</b><strong>Read-only</strong><span>Cannot change or delete Google Calendar data</span></div>
+        <div><b>02</b><strong>Local-first</strong><span>Tokens and calendar data remain on your computer</span></div>
+        <div><b>03</b><strong>No tracking</strong><span>No analytics, advertising, or server receiving Google user data</span></div>
+      </section>
+
+      <section class="section" aria-labelledby="how-it-works">
+        <div class="section-heading">
+          <p class="eyebrow">How it works</p>
+          <h2 id="how-it-works">A small, deliberate connection.</h2>
+          <p>The plugin asks only for the access it needs to identify connected accounts and render upcoming events.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <span class="number">01</span>
+            <h3>Connect</h3>
+            <p>Choose Connect Google Calendar and approve narrowly scoped, read-only access in your system browser.</p>
+          </article>
+          <article class="card">
+            <span class="number">02</span>
+            <h3>View</h3>
+            <p>Calendar Agenda synchronizes an approximately 28-day window for private day, week, and month views.</p>
+          </article>
+          <article class="card">
+            <span class="number">03</span>
+            <h3>Disconnect</h3>
+            <p>Remove an account from Settings to revoke access and immediately purge its locally cached calendar data.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="privacy" aria-labelledby="data-heading">
+        <div class="section-heading">
+          <p class="eyebrow">Google user data</p>
+          <h2 id="data-heading">What is accessed—and why.</h2>
+        </div>
+        <ul class="data-list">
+          <li><strong>Account identity</strong><br>Email address and stable account identifier label accounts and prevent duplicate connections.</li>
+          <li><strong>Calendar list</strong><br>Calendar identifiers, names, and colors let you recognize and filter subscribed calendars.</li>
+          <li><strong>Upcoming events</strong><br>Titles, times, all-day status, and locations render the agenda for the upcoming sync window.</li>
+          <li><strong>OAuth refresh token</strong><br>Stored in Linux Secret Service so background synchronization can continue without repeated consent.</li>
+        </ul>
+        <div class="notice">Calendar Agenda does not sell Google user data, use it for advertising, transfer it to an external service, or use it to train machine-learning models.</div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell footer-content">
+        <span>Calendar Agenda · A source-available Omarchy plugin</span>
+        <div class="footer-links">
+          <a href="/privacy/">Privacy</a>
+          <a href="/terms/">Terms</a>
+          <a href="https://github.com/alexinslc/omarchy-calendar-agenda/issues">Support</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

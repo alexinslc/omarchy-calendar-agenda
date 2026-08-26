@@ -34,6 +34,7 @@ Panel {
     })
     property var accountOptions: []
     property var calendarOptions: []
+    property alias onboarding: onboardingService
     readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/events.json"
     readonly property string settingsPath: Quickshell.env("HOME") + "/.local/state/omarchy/calendar-agenda/settings.json"
 
@@ -47,6 +48,10 @@ Panel {
         ? "Synced " + AgendaModel.timeLabel(cacheGeneratedAt, true)
             + "  •  Through " + AgendaModel.shortDate(cacheRangeEnd)
         : ""
+
+    onOpenedChanged: if (opened) {
+        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
 
     function loadEvents(text) {
         var data
@@ -82,9 +87,13 @@ Panel {
             root.dataMessage = "Calendar data has expired. Run a sync to refresh it."
             return
         }
-        root.accountOptions = cache.accounts.map(function(account) { return account.id }).sort()
+        root.accountOptions = cache.accounts.slice().sort(function(a, b) {
+            return root.accountLabel(a).localeCompare(root.accountLabel(b))
+        })
         root.calendarOptions = cache.calendars.slice().sort(function(a, b) {
-            var accountOrder = a.accountId.localeCompare(b.accountId)
+            var accountOrder = root.accountLabelForId(a.accountId).localeCompare(
+                root.accountLabelForId(b.accountId)
+            )
             return accountOrder !== 0 ? accountOrder : a.name.localeCompare(b.name)
         })
         root.dataState = "ready"
@@ -104,6 +113,18 @@ Panel {
 
     function preferenceEnabled(map, key) {
         return !map || map[key] !== false
+    }
+
+    function accountLabel(account) {
+        return String(account.email || account.displayName || account.id)
+    }
+
+    function accountLabelForId(accountId) {
+        for (var i = 0; i < root.accountOptions.length; i++) {
+            if (root.accountOptions[i].id === String(accountId))
+                return root.accountLabel(root.accountOptions[i])
+        }
+        return String(accountId)
     }
 
     function savePreferences() {
@@ -180,6 +201,7 @@ Panel {
     }
 
     function open() {
+        onboardingService.refresh()
         cacheFile.reload()
         root.controller.show()
     }
@@ -214,6 +236,11 @@ Panel {
             root.preferencesLoaded = true
             root.rebuild()
         }
+    }
+
+    OnboardingService {
+        id: onboardingService
+        onCacheChanged: cacheFile.reload()
     }
 
     FileView {
@@ -256,16 +283,25 @@ Panel {
                 else if (text === "d" || text === "D") root.setMode("day")
                 else if (text === "w" || text === "W") root.setMode("week")
                 else if (text === "m" || text === "M") root.setMode("month")
+                else if (text === "s" || text === "S") root.settingsOpen = true
+            }
+
+            OnboardingPanel {
+                visible: onboardingService.loaded && onboardingService.accounts.length === 0
+                panel: root
+                onboarding: onboardingService
             }
 
             SettingsPanel {
-                visible: root.settingsOpen
+                visible: root.settingsOpen && onboardingService.accounts.length > 0
                 panel: root
+                onboarding: onboardingService
             }
 
             Column {
                 id: agendaColumn
                 visible: !root.settingsOpen
+                    && (!onboardingService.loaded || onboardingService.accounts.length > 0)
                 anchors.fill: parent
                 anchors.margins: Style.space(16)
                 spacing: Style.space(10)

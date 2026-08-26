@@ -1,28 +1,53 @@
 import json
+import fcntl
+import os
 import shutil
 import stat
 import subprocess
+import tempfile
 import unittest
 import urllib.parse
 from pathlib import Path
-from unittest.mock import patch
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
 
-from sync.cache import CACHE_SCHEMA_VERSION, write_events
-from sync.cli import main
+import sync.config as config_module
+from sync.cache import CACHE_SCHEMA_VERSION, CacheError, purge_account, write_events
+from sync.cli import (
+    _connect_account,
+    _reconnect_account,
+    _remove_connected_account,
+    _sync_accounts,
+    main,
+)
 from sync.config import ConfigError, GoogleConfig, load_config
 from sync.google import (
     CALENDAR_ENDPOINT,
     GoogleCalendarClient,
+    GoogleError,
     OAuthError,
     OAuthToken,
     READ_ONLY_SCOPE,
+    READ_ONLY_SCOPES,
     SecretServiceError,
     SecretToolStore,
     authorization_url,
+    exchange_code,
     normalize_event,
     pkce_pair,
     revoke_token,
+    user_info,
 )
+from sync.registry import (
+    Account,
+    RegistryError,
+    add_account,
+    load_accounts,
+    save_accounts,
+)
+from sync.locking import operation_lock
+from sync.scheduler import SchedulerError, install_timer, remove_timer
+from sync.status import load_sync_status, write_sync_status
 
 
 class ConfigTests(unittest.TestCase):
@@ -67,6 +92,116 @@ class ConfigTests(unittest.TestCase):
         )
         with self.assertRaises(ConfigError):
             load_config(self.path)
+
+    def test_config_accepts_a_google_client_without_an_issued_secret(self) -> None:
+        self.path.write_text(
+            json.dumps(
+                {"google": {"client_id": "test-client.apps.googleusercontent.com"}}
+            ),
+            encoding="utf-8",
+        )
+        self.assertEqual(load_config(self.path).client_secret, "")
+
+    def test_fetches_and_privately_caches_production_config(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        payload = {
+            "schemaVersion": 1,
+            "google": {
+                "client_id": "production.apps.googleusercontent.com",
+                "client_secret": "issued-desktop-value",
+            },
+        }
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch("sync.config.fetch_remote_config", return_value=payload) as fetch,
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "production.apps.googleusercontent.com")
+        self.assertEqual(loaded.client_secret, "issued-desktop-value")
+        self.assertEqual(stat.S_IMODE(cached.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(cached.parent.stat().st_mode), 0o700)
+        fetch.assert_called_once_with()
+
+    def test_private_override_wins_without_fetching_production_config(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        override.write_text(
+            json.dumps(
+                {
+                    "google": {
+                        "client_id": "private.apps.googleusercontent.com",
+                        "client_secret": "private-value",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch("sync.config.fetch_remote_config") as fetch,
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "private.apps.googleusercontent.com")
+        fetch.assert_not_called()
+
+    def test_stale_valid_cache_survives_configuration_endpoint_outage(self) -> None:
+        override = self.directory / "override.json"
+        cached = self.directory / "state" / "oauth-client.json"
+        cached.parent.mkdir(parents=True)
+        cached.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "google": {
+                        "client_id": "cached.apps.googleusercontent.com",
+                        "client_secret": "cached-value",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        with (
+            patch.object(config_module, "DEFAULT_CONFIG_PATH", override),
+            patch.object(config_module, "DEFAULT_CACHED_CONFIG_PATH", cached),
+            patch.object(config_module, "_cache_is_fresh", return_value=False),
+            patch(
+                "sync.config.fetch_remote_config",
+                side_effect=ConfigError("endpoint unavailable"),
+            ),
+        ):
+            loaded = load_config()
+        self.assertEqual(loaded.client_id, "cached.apps.googleusercontent.com")
+
+    def test_rejects_invalid_remote_schema_before_caching(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "schema"):
+            config_module._parse_config(
+                {
+                    "schemaVersion": 2,
+                    "google": {
+                        "client_id": "production.apps.googleusercontent.com",
+                        "client_secret": "issued-desktop-value",
+                    },
+                },
+                require_secret=True,
+            )
+
+    def test_remote_config_cannot_inject_legacy_accounts(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "must not contain accounts"):
+            config_module._parse_config(
+                {
+                    "schemaVersion": 1,
+                    "google": {
+                        "client_id": "production.apps.googleusercontent.com",
+                        "client_secret": "issued-desktop-value",
+                        "accounts": ["injected"],
+                    },
+                },
+                require_secret=True,
+                allow_accounts=False,
+            )
 
 
 class CacheTests(unittest.TestCase):
@@ -136,10 +271,17 @@ class GoogleTests(unittest.TestCase):
             challenge,
         )
         self.assertTrue(url.startswith("https://accounts.google.com/o/oauth2/v2/auth?"))
-        self.assertIn("scope=" + "https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly", url)
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        self.assertEqual(set(query["scope"][0].split()), set(READ_ONLY_SCOPES))
+        self.assertIn(
+            "https://www.googleapis.com/auth/calendar.events.readonly",
+            READ_ONLY_SCOPE,
+        )
+        self.assertNotIn(
+            "https://www.googleapis.com/auth/calendar.readonly", READ_ONLY_SCOPES
+        )
         self.assertIn("code_challenge_method=S256", url)
         self.assertNotIn(CALENDAR_ENDPOINT, url)
-        self.assertEqual(READ_ONLY_SCOPE, "https://www.googleapis.com/auth/calendar.readonly")
         with self.assertRaises(OAuthError):
             authorization_url(
                 "test-client.apps.googleusercontent.com",
@@ -179,6 +321,59 @@ class GoogleTests(unittest.TestCase):
 
         with patch("sync.google.urllib.request.urlopen", return_value=Response()):
             revoke_token("refresh-token")
+
+    @patch(
+        "sync.google._form_request",
+        return_value={
+            "refresh_token": "refresh-token",
+            "access_token": "access-token",
+        },
+    )
+    def test_public_client_exchange_omits_an_empty_secret(self, request_mock) -> None:
+        exchange_code(
+            "test-client.apps.googleusercontent.com",
+            "",
+            "authorization-code",
+            "verifier",
+            "http://127.0.0.1:4321/oauth2callback",
+        )
+        self.assertNotIn("client_secret", request_mock.call_args.args[1])
+
+    @patch(
+        "sync.google._form_request",
+        return_value={
+            "refresh_token": "refresh-token",
+            "access_token": "access-token",
+        },
+    )
+    def test_desktop_client_exchange_includes_issued_secret(self, request_mock) -> None:
+        exchange_code(
+            "test-client.apps.googleusercontent.com",
+            "issued-client-secret",
+            "authorization-code",
+            "verifier",
+            "http://127.0.0.1:4321/oauth2callback",
+        )
+        self.assertEqual(
+            request_mock.call_args.args[1]["client_secret"],
+            "issued-client-secret",
+        )
+
+    def test_user_info_requires_stable_subject_and_email(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {"sub": "google-subject", "email": "alex@example.com", "name": "Alex"}
+                ).encode()
+
+        with patch("sync.google.urllib.request.urlopen", return_value=Response()):
+            self.assertEqual(user_info("access-token")["sub"], "google-subject")
 
     def test_calendar_api_follows_calendar_and_event_pagination(self) -> None:
         responses = iter(
@@ -223,6 +418,7 @@ class GoogleTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    @patch("sync.cli.write_sync_status")
     @patch("sync.cli.write_events")
     @patch("sync.cli.GoogleCalendarClient")
     @patch("sync.cli.refresh_access_token", return_value=OAuthToken("access-token"))
@@ -235,13 +431,27 @@ class CliTests(unittest.TestCase):
             accounts=("personal",),
         ),
     )
+    @patch(
+        "sync.cli.migrate_legacy_accounts",
+        return_value=(
+            Account(
+                id="personal",
+                provider_subject="legacy:personal",
+                email="",
+                display_name="personal",
+                legacy=True,
+            ),
+        ),
+    )
     def test_sync_writes_coverage_and_calendar_metadata(
         self,
+        _migrate_accounts,
         _load_config,
         store_class,
         _refresh_access_token,
         client_class,
         write_events_mock,
+        write_status_mock,
     ) -> None:
         store_class.return_value.load.return_value = "refresh-token"
         client = client_class.return_value
@@ -260,15 +470,353 @@ class CliTests(unittest.TestCase):
             }
         ]
 
-        self.assertEqual(main(["--sync"]), 0)
+        with patch("sync.cli.operation_lock", return_value=nullcontext()):
+            self.assertEqual(main(["--sync"]), 0)
 
         args, kwargs = write_events_mock.call_args
         self.assertEqual(args[0][0]["accountId"], "personal")
-        self.assertEqual(kwargs["accounts"], [{"id": "personal"}])
+        self.assertEqual(kwargs["accounts"][0]["id"], "personal")
+        self.assertEqual(kwargs["accounts"][0]["displayName"], "personal")
         self.assertEqual(kwargs["calendars"][0]["name"], "Personal")
         self.assertTrue(kwargs["generated_at"].endswith("Z"))
         self.assertTrue(kwargs["range_start"].endswith("Z"))
         self.assertTrue(kwargs["range_end"].endswith("Z"))
+        write_status_mock.assert_called_once()
+        self.assertEqual(
+            write_status_mock.call_args.args[0]["personal"],
+            {"ok": True, "error": ""},
+        )
+
+
+class RegistryTests(unittest.TestCase):
+    def test_round_trip_is_private_and_rejects_duplicate_google_account(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "accounts.json"
+            first = Account("one", "subject-one", "one@example.com", "One")
+            save_accounts((first,), path)
+            self.assertEqual(load_accounts(path), (first,))
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            with self.assertRaisesRegex(RegistryError, "already connected"):
+                add_account(
+                    Account("two", "subject-one", "alias@example.com", "Alias"),
+                    path,
+                )
+
+    def test_purge_removes_only_selected_account_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.json"
+            write_events(
+                [
+                    {"accountId": "one", "title": "Private"},
+                    {"accountId": "two", "title": "Keep"},
+                ],
+                path,
+                generated_at="2026-08-24T15:00:00Z",
+                range_start="2026-08-24T15:00:00Z",
+                range_end="2026-09-21T15:00:00Z",
+                accounts=[{"id": "one"}, {"id": "two"}],
+                calendars=[
+                    {"accountId": "one", "id": "a"},
+                    {"accountId": "two", "id": "b"},
+                ],
+            )
+            purge_account("one", path)
+            payload = json.loads(path.read_text())
+            self.assertEqual(payload["accounts"], [{"id": "two"}])
+            self.assertEqual(payload["events"], [{"accountId": "two", "title": "Keep"}])
+
+    def test_purge_discards_an_unusable_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.json"
+            path.write_text("not-json", encoding="utf-8")
+            purge_account("one", path)
+            self.assertFalse(path.exists())
+
+    def test_purge_reports_an_unreadable_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.json"
+            path.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(Path, "read_text", side_effect=OSError("denied")),
+                self.assertRaisesRegex(CacheError, "cannot read calendar cache"),
+            ):
+                purge_account("one", path)
+
+    def test_sync_health_round_trip_is_private(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sync-status.json"
+            values = {
+                "one": {"ok": False, "error": "authorization expired"},
+                "two": {"ok": True, "error": ""},
+            }
+            write_sync_status(values, path)
+            self.assertEqual(load_sync_status(path), values)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+
+class AccountLifecycleTests(unittest.TestCase):
+    @patch("sync.cli._sync_accounts", return_value={"ok": True})
+    @patch("sync.cli.install_timer")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "subject", "email": "alex@example.com", "name": "Alex"},
+    )
+    @patch("sync.cli.authorize", return_value=("refresh-token", OAuthToken("access-token")))
+    def test_connect_registers_identity_and_enables_timer(
+        self, _authorize, _identity, install_timer_mock, _sync
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            store = Mock()
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with patch("sync.cli.DEFAULT_REGISTRY_PATH", registry):
+                result = _connect_account(config, store)
+            self.assertTrue(result["ok"])
+            self.assertEqual(load_accounts(registry)[0].email, "alex@example.com")
+            store.save.assert_called_once()
+            install_timer_mock.assert_called_once()
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "subject", "email": "alex@example.com", "name": "Alex"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_connect_revokes_new_token_for_duplicate_identity(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            existing = Account("one", "subject", "alex@example.com", "Alex")
+            save_accounts((existing,), registry)
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "already connected"),
+            ):
+                _connect_account(
+                    GoogleConfig("test.apps.googleusercontent.com", "", ()), Mock()
+                )
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.revoke_token")
+    @patch("sync.cli.user_info", side_effect=GoogleError("identity failed"))
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_connect_revokes_new_token_when_identity_lookup_fails(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with self.assertRaisesRegex(GoogleError, "identity failed"):
+            _connect_account(
+                GoogleConfig("test.apps.googleusercontent.com", "", ()), Mock()
+            )
+        revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli._sync_accounts", return_value={"ok": True})
+    @patch("sync.cli.remove_timer")
+    @patch("sync.cli.purge_account")
+    @patch("sync.cli.revoke_token")
+    def test_remove_revokes_token_purges_cache_and_disables_last_timer(
+        self, revoke_mock, purge_mock, remove_timer_mock, _sync
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            account = Account("one", "subject", "one@example.com", "One")
+            save_accounts((account,), registry)
+            store = Mock()
+            store.load.return_value = "refresh-token"
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with patch("sync.cli.DEFAULT_REGISTRY_PATH", registry):
+                result = _remove_connected_account(
+                    "one", config, store, local_only=False
+                )
+            self.assertTrue(result["ok"])
+            self.assertEqual(load_accounts(registry), ())
+            revoke_mock.assert_called_once_with("refresh-token")
+            purge_mock.assert_called_once_with("one")
+            remove_timer_mock.assert_called_once()
+
+    @patch("sync.cli._sync_accounts", return_value={"ok": True})
+    @patch("sync.cli.remove_timer")
+    @patch("sync.cli.purge_account")
+    @patch("sync.cli.revoke_token")
+    def test_local_only_remove_does_not_require_google_or_oauth_config(
+        self, revoke_mock, _purge, _remove_timer, _sync
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            save_accounts(
+                (Account("one", "subject", "one@example.com", "One"),),
+                registry,
+            )
+            store = Mock()
+            with patch("sync.cli.DEFAULT_REGISTRY_PATH", registry):
+                result = _remove_connected_account(
+                    "one", None, store, local_only=True
+                )
+            self.assertTrue(result["ok"])
+            revoke_mock.assert_not_called()
+            store.load.assert_not_called()
+            store.delete.assert_called_once_with("one")
+
+    @patch("sync.cli.purge_account")
+    @patch("sync.cli.revoke_token")
+    def test_local_only_remove_keeps_registry_when_token_cleanup_fails(
+        self, revoke_mock, purge_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            account = Account("one", "subject", "one@example.com", "One")
+            save_accounts((account,), registry)
+            store = Mock()
+            store.delete.side_effect = SecretServiceError("clear failed")
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(SecretServiceError, "clear failed"),
+            ):
+                _remove_connected_account("one", None, store, local_only=True)
+            self.assertEqual(load_accounts(registry), (account,))
+            purge_mock.assert_not_called()
+            revoke_mock.assert_not_called()
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "different", "email": "two@example.com", "name": "Two"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_reconnect_rejects_a_different_google_identity(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            existing = Account("one", "original", "one@example.com", "One")
+            save_accounts((existing,), registry)
+            store = Mock()
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "same Google account"),
+            ):
+                _reconnect_account("one", config, store)
+            self.assertEqual(load_accounts(registry), (existing,))
+            store.save.assert_not_called()
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.revoke_token")
+    @patch(
+        "sync.cli.user_info",
+        return_value={"sub": "new", "email": "new@example.com", "name": "New"},
+    )
+    @patch("sync.cli.authorize", return_value=("new-token", OAuthToken("access-token")))
+    def test_add_is_blocked_until_legacy_accounts_are_reconnected(
+        self, _authorize, _identity, revoke_mock
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "accounts.json"
+            legacy = Account("old", "legacy:old", "", "old", legacy=True)
+            save_accounts((legacy,), registry)
+            config = GoogleConfig("test.apps.googleusercontent.com", "", ())
+            with (
+                patch("sync.cli.DEFAULT_REGISTRY_PATH", registry),
+                self.assertRaisesRegex(RegistryError, "reconnect migrated accounts"),
+            ):
+                _connect_account(config, Mock())
+            revoke_mock.assert_called_once_with("new-token")
+
+    @patch("sync.cli.write_sync_status")
+    @patch("sync.cli.write_events")
+    @patch("sync.cli.load_sync_status")
+    @patch("sync.cli.refresh_access_token", return_value=OAuthToken("access-token"))
+    def test_failed_account_does_not_publish_partial_calendar_data(
+        self, _refresh, load_status_mock, write_events_mock, write_status_mock
+    ) -> None:
+        load_status_mock.return_value = {
+            "other": {"ok": False, "error": "previous failure"}
+        }
+        account = Account("one", "subject", "one@example.com", "One")
+        other = Account("other", "subject-2", "other@example.com", "Other")
+        store = Mock()
+        store.load.return_value = "refresh-token"
+        client = Mock()
+        client.list_calendars.return_value = [
+            {"id": "first", "summary": "First"},
+            {"id": "second", "summary": "Second"},
+        ]
+        client.list_events.side_effect = [
+            [{"summary": "Partial", "start": {"date": "2026-08-25"}, "end": {"date": "2026-08-26"}}],
+            GoogleError("second calendar failed"),
+        ]
+        with patch("sync.cli.GoogleCalendarClient", return_value=client):
+            result = _sync_accounts(
+                GoogleConfig("test.apps.googleusercontent.com", "", ()),
+                (account,),
+                store,
+                known_accounts=(account, other),
+            )
+        self.assertFalse(result["ok"])
+        write_events_mock.assert_not_called()
+        written_health = write_status_mock.call_args.args[0]
+        self.assertEqual(written_health["one"]["ok"], False)
+        self.assertEqual(written_health["other"]["error"], "previous failure")
+
+
+class SchedulerTests(unittest.TestCase):
+    def test_install_and_remove_manage_only_named_user_units(self) -> None:
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            units = Path(directory)
+            install_timer(units, runner=runner)
+            self.assertTrue((units / "omarchy-calendar-agenda-sync.timer").is_file())
+            remove_timer(units, runner=runner)
+            self.assertFalse((units / "omarchy-calendar-agenda-sync.timer").exists())
+        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+
+    def test_install_enforces_private_existing_unit_directory(self) -> None:
+        def runner(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            units = Path(directory) / "user"
+            units.mkdir(mode=0o755)
+            install_timer(units, runner=runner)
+            self.assertEqual(stat.S_IMODE(units.stat().st_mode), 0o700)
+
+    def test_remove_cleans_files_even_when_disable_fails(self) -> None:
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append(args)
+            if "disable" in args:
+                return subprocess.CompletedProcess(args, 1, stdout="", stderr="failed")
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            units = Path(directory)
+            for name in ("omarchy-calendar-agenda-sync.service", "omarchy-calendar-agenda-sync.timer"):
+                (units / name).write_text("unit", encoding="utf-8")
+            with self.assertRaisesRegex(SchedulerError, "failed"):
+                remove_timer(units, runner=runner)
+            self.assertFalse((units / "omarchy-calendar-agenda-sync.timer").exists())
+            self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+
+
+class LockingTests(unittest.TestCase):
+    def test_operation_lock_is_private_and_exclusive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state" / "operations.lock"
+            with operation_lock(path):
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
+                descriptor = os.open(path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
 
 
 if __name__ == "__main__":

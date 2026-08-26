@@ -32,6 +32,8 @@ jobs:
           tag = os.environ["GITHUB_REF_NAME"]
           if tag != f"v{version}":
               raise SystemExit(f"tag {tag!r} does not match manifest version {version!r}")
+          if Path("oauth-client.json").exists():
+              raise SystemExit("release source must not contain OAuth client credentials")
           PY
           python3 -m unittest discover -s tests -v
 
@@ -69,4 +71,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
-

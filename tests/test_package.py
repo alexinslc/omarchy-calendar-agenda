@@ -23,11 +23,18 @@ class PackageTests(unittest.TestCase):
             "AgendaModel.js",
             "SettingsPanel.qml",
             "CompactToggle.qml",
+            "OnboardingService.qml",
+            "OnboardingPanel.qml",
+            "calendar_agenda.py",
             "sync/__init__.py",
             "sync/cache.py",
             "sync/cli.py",
             "sync/config.py",
             "sync/google.py",
+            "sync/locking.py",
+            "sync/registry.py",
+            "sync/scheduler.py",
+            "sync/status.py",
             "systemd/omarchy-calendar-agenda-sync.service",
             "systemd/omarchy-calendar-agenda-sync.timer",
         ):
@@ -51,13 +58,70 @@ class PackageTests(unittest.TestCase):
             "io.github.alexinslc.calendar-agenda",
             service,
         )
-        self.assertIn("ExecStart=/usr/bin/python3 -m sync.cli --sync", service)
+        self.assertIn(
+            "ExecStart=/usr/bin/python3 %h/.config/omarchy/plugins/"
+            "io.github.alexinslc.calendar-agenda/calendar_agenda.py --sync",
+            service,
+        )
+
+    def test_onboarding_uses_only_the_bundled_helper(self) -> None:
+        service = (ROOT / "OnboardingService.qml").read_text(encoding="utf-8")
+        self.assertIn('property string helperPath: Quickshell.env("HOME")', service)
+        self.assertIn('["/usr/bin/python3", root.helperPath', service)
+        self.assertEqual(service.count("Process " + "{"), 2)
+
+    def test_public_site_and_plugin_use_the_same_privacy_url(self) -> None:
+        privacy_url = "https://calendar.alexinslc.com/privacy/"
+        onboarding = (ROOT / "OnboardingPanel.qml").read_text(encoding="utf-8")
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(privacy_url, onboarding)
+        self.assertIn('href="/privacy/"', homepage)
+        self.assertIn("Google API Services User Data Policy", privacy)
+
+    def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertEqual(config["assets"]["directory"], "./site")
+        self.assertEqual(config["assets"]["binding"], "ASSETS")
+        self.assertEqual(config["main"], "worker.js")
+        self.assertEqual(
+            config["secrets"]["required"],
+            ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+        )
+        self.assertEqual(
+            config["routes"],
+            [{"pattern": "calendar.alexinslc.com", "custom_domain": True}],
+        )
+
+    def test_production_oauth_credentials_are_not_committed(self) -> None:
+        self.assertFalse((ROOT / "oauth-client.json").exists())
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("oauth-client.json", ignored)
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('const CLIENT_CONFIG_PATH = "/oauth/client-config";', worker)
+        self.assertIn("env.GOOGLE_OAUTH_CLIENT_ID", worker)
+        self.assertIn("env.GOOGLE_OAUTH_CLIENT_SECRET", worker)
 
     def test_agenda_has_one_settings_panel_and_visible_mode_selector(self) -> None:
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
         self.assertEqual(panel.count("SettingsPanel {"), 1)
         self.assertNotIn("id: settingsColumn", panel)
         self.assertIn('model: ["day", "week", "month"]', panel)
+
+    def test_account_labels_preserve_display_metadata(self) -> None:
+        model = (ROOT / "AgendaModel.js").read_text(encoding="utf-8")
+        panel = (ROOT / "SettingsPanel.qml").read_text(encoding="utf-8")
+        self.assertIn('"displayName": account.displayName', model)
+        self.assertIn("panel.accountLabel(modelData)", panel)
+
+    def test_onboarding_surfaces_structured_errors_and_warnings(self) -> None:
+        service = (ROOT / "OnboardingService.qml").read_text(encoding="utf-8")
+        self.assertIn("property string statusError", service)
+        self.assertIn("property string actionError", service)
+        self.assertIn("function resultDetails(parsed)", service)
+        self.assertIn("parsed.sync.errors", service)
 
 
 if __name__ == "__main__":
