@@ -35,6 +35,7 @@ Flickable {
             width: parent.width
             height: Style.space(34)
             Text {
+                textFormat: Text.PlainText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "SETTINGS"
@@ -56,6 +57,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "CONNECTED ACCOUNTS"
             color: panel.accentForeground
             font.family: Style.font.family
@@ -67,6 +69,7 @@ Flickable {
         Text {
             visible: onboarding.actionStatus !== "" || onboarding.lastError !== ""
             width: root.width
+            textFormat: Text.PlainText
             text: onboarding.lastError !== "" ? onboarding.lastError : onboarding.actionStatus
             color: onboarding.lastError !== "" ? panel.accentForeground : panel.mutedForeground
             font.family: Style.font.family
@@ -126,6 +129,7 @@ Flickable {
 
                     Text {
                         width: parent.width
+                        textFormat: Text.PlainText
                         text: modelData.email || modelData.displayName || modelData.id
                         color: panel.contentForeground
                         font.family: Style.font.family
@@ -135,6 +139,7 @@ Flickable {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         visible: modelData.legacy === true
                         width: parent.width
                         text: "Reconnect once to finish account migration."
@@ -147,6 +152,7 @@ Flickable {
                     Text {
                         visible: modelData.state === "needs-attention"
                         width: parent.width
+                        textFormat: Text.PlainText
                         text: "Needs attention  ·  " + String(modelData.lastError || "Reconnect this account.")
                         color: panel.accentForeground
                         font.family: Style.font.family
@@ -178,6 +184,7 @@ Flickable {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         visible: root.pendingRemovalId === modelData.id
                         width: parent.width
                         text: "Remove this plugin’s access and cached events? Nothing in Google Calendar will be deleted."
@@ -217,6 +224,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "DISPLAY"
             color: panel.accentForeground
             font.family: Style.font.family
@@ -241,6 +249,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "TIME FORMAT"
             color: panel.accentForeground
             font.family: Style.font.family
@@ -262,6 +271,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "CALENDARS"
             color: panel.accentForeground
             font.family: Style.font.family
@@ -289,6 +299,7 @@ Flickable {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "ACCOUNT VISIBILITY"
             color: panel.accentForeground
             font.family: Style.font.family

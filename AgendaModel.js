@@ -5,6 +5,7 @@ var MONTH_NAMES = [
     "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
     "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
 ]
+var MAX_EXPANDED_EVENT_DAYS = 32
 
 function pad(value) {
     return value < 10 ? "0" + value : String(value)
@@ -61,7 +62,11 @@ function normalizeEvent(event) {
     }
 }
 
-function activeDateKeys(event) {
+function dayStart(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function activeDateKeys(event, rangeStart, rangeEnd) {
     var start = event.allDay ? dateForKey(event.start) : new Date(event.start)
     if (isNaN(start.getTime()) || !event.end) return [event.dateKey]
 
@@ -72,23 +77,37 @@ function activeDateKeys(event) {
         end.setDate(end.getDate() - 1)
     }
 
+    var cursor = dayStart(start)
+    var last = dayStart(end)
+    var lower = new Date(rangeStart || "")
+    if (!isNaN(lower.getTime())) {
+        var firstAllowed = dayStart(lower)
+        if (cursor < firstAllowed) cursor = firstAllowed
+    }
+    var upper = new Date(rangeEnd || "")
+    if (!isNaN(upper.getTime())) {
+        var lastAllowed = dayStart(upper)
+        if (upper.getHours() === 0 && upper.getMinutes() === 0
+                && upper.getSeconds() === 0 && upper.getMilliseconds() === 0)
+            lastAllowed.setDate(lastAllowed.getDate() - 1)
+        if (last > lastAllowed) last = lastAllowed
+    }
+
     var keys = []
-    var cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-    var last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-    while (cursor <= last) {
+    while (cursor <= last && keys.length < MAX_EXPANDED_EVENT_DAYS) {
         keys.push(keyForDate(cursor))
         cursor.setDate(cursor.getDate() + 1)
     }
     return keys
 }
 
-function parseEvents(data) {
+function parseEvents(data, rangeStart, rangeEnd) {
     var source = data && data.events instanceof Array ? data.events : []
     var result = []
     for (var i = 0; i < source.length; i++) {
         var event = normalizeEvent(source[i])
         if (!event) continue
-        var dates = activeDateKeys(event)
+        var dates = activeDateKeys(event, rangeStart, rangeEnd)
         for (var j = 0; j < dates.length; j++) {
             var occurrence = Object.assign({}, event)
             occurrence.dateKey = dates[j]
@@ -174,7 +193,7 @@ function parseCache(data) {
     }
 
     return {
-        "events": parseEvents(data),
+        "events": parseEvents(data, rangeStart, rangeEnd),
         "accounts": accounts,
         "calendars": calendars,
         "generatedAt": String(data.generatedAt),

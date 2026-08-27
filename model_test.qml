@@ -37,6 +37,19 @@ QtObject {
                 Qt.exit(1)
                 return
         }
+        var bounded = AgendaModel.parseEvents({
+            events: [{
+                title: "Untrusted long event",
+                start: "1900-01-01",
+                end: "9999-12-31",
+                allDay: true
+            }]
+        })
+        if (bounded.length !== 32) {
+            console.error("all-day expansion bound test failed")
+            Qt.exit(1)
+            return
+        }
         var cache = AgendaModel.parseCache({
             schemaVersion: 1,
             generatedAt: "2026-08-24T15:00:00Z",
@@ -64,6 +77,35 @@ QtObject {
                 || cache.calendars.length !== 1
                 || AgendaModel.calendarKey("personal", "primary") !== "personal::primary") {
             console.error("cache contract test failed")
+            Qt.exit(1)
+            return
+        }
+        var clippedCache = AgendaModel.parseCache({
+            schemaVersion: 1,
+            generatedAt: "2026-08-24T15:00:00Z",
+            rangeStart: "2026-08-24T15:00:00Z",
+            rangeEnd: "2026-09-21T15:00:00Z",
+            accounts: [{ id: "personal" }],
+            calendars: [{
+                accountId: "personal",
+                id: "primary",
+                name: "<img src='https://attacker.invalid/calendar'>"
+            }],
+            events: [{
+                title: "<img src='https://attacker.invalid/event'>",
+                start: "1900-01-01",
+                end: "9999-12-31",
+                allDay: true,
+                location: "",
+                accountId: "personal",
+                calendarId: "primary",
+                calendarName: "<img src='https://attacker.invalid/calendar'>"
+            }]
+        })
+        if (clippedCache.events.length !== 29
+                || clippedCache.events[0].dateKey !== "2026-08-24"
+                || clippedCache.events[28].dateKey !== "2026-09-21") {
+            console.error("cache-range expansion bound test failed")
             Qt.exit(1)
             return
         }

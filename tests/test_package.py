@@ -99,6 +99,26 @@ class PackageTests(unittest.TestCase):
         self.assertNotIn("id: settingsColumn", panel)
         self.assertIn('model: ["day", "week", "month"]', panel)
 
+    def test_untrusted_calendar_labels_render_as_plain_text(self) -> None:
+        compact_toggle = (ROOT / "CompactToggle.qml").read_text(encoding="utf-8")
+        agenda = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "textFormat: Text.PlainText\n        text: root.label",
+            compact_toggle,
+        )
+        self.assertIn(
+            "textFormat: Text.PlainText\n                                                text: modelData.title",
+            agenda,
+        )
+        for path in ROOT.glob("*.qml"):
+            source = path.read_text(encoding="utf-8")
+            self.assertEqual(
+                source.count("Text {"),
+                source.count("textFormat: Text.PlainText"),
+                path.name,
+            )
+
     def test_agenda_implements_the_bar_panel_handoff_contract(self) -> None:
         widget = (ROOT / "AgendaBarWidget.qml").read_text(encoding="utf-8")
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")

@@ -319,6 +319,7 @@ Panel {
                     height: Style.space(32)
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         text: "󰃭"
@@ -328,6 +329,7 @@ Panel {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.left: parent.left
                         anchors.leftMargin: Style.space(32)
                         anchors.verticalCenter: parent.verticalCenter
@@ -380,6 +382,7 @@ Panel {
                                 : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
 
                             Text {
+                                textFormat: Text.PlainText
                                 anchors.centerIn: parent
                                 text: modelData.toUpperCase()
                                 color: root.viewMode === modelData ? root.accentForeground : root.mutedForeground
@@ -402,6 +405,7 @@ Panel {
                     height: Style.space(30)
 
                     Text {
+                        textFormat: Text.PlainText
                         text: "‹"
                         width: Style.space(30)
                         color: root.canMove(-1) ? root.contentForeground : root.mutedForeground
@@ -416,6 +420,7 @@ Panel {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         text: root.title
                         width: parent.width - Style.space(60)
                         color: root.contentForeground
@@ -427,6 +432,7 @@ Panel {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         text: "›"
                         width: Style.space(30)
                         color: root.canMove(1) ? root.contentForeground : root.mutedForeground
@@ -442,6 +448,7 @@ Panel {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     visible: root.dataState !== "ready" && root.dataMessage !== ""
                     width: parent.width
                     text: root.dataMessage
@@ -452,6 +459,7 @@ Panel {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     visible: root.dataState === "ready" && root.syncSummary !== ""
                     width: parent.width
                     text: root.syncSummary
@@ -487,6 +495,7 @@ Panel {
                                 spacing: Style.space(5)
 
                                 Text {
+                                    textFormat: Text.PlainText
                                     text: modelData.label
                                     color: root.accentForeground
                                     font.family: Style.font.family
@@ -511,6 +520,7 @@ Panel {
                                             spacing: Style.space(9)
 
                                             Text {
+                                                textFormat: Text.PlainText
                                                 width: Style.space(58)
                                                 visible: root.preferences.showTime
                                                 text: modelData.allDay
@@ -545,6 +555,7 @@ Panel {
                         }
 
                         Text {
+                            textFormat: Text.PlainText
                             visible: root.dataState === "ready" && root.groups.length === 0
                             width: parent.width
                             text: root.rangeAvailability === "partial-end"

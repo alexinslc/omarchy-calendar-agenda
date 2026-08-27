@@ -16,6 +16,7 @@ Column {
         height: Style.space(36)
 
         Text {
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             text: "󰃭  CALENDAR AGENDA"
@@ -29,6 +30,7 @@ Column {
     Item { width: 1; height: Style.space(32) }
 
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         text: "Bring your day into focus"
         color: root.panel.contentForeground
@@ -40,6 +42,7 @@ Column {
     }
 
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         text: "Connect Google Calendar to see your day, week, and month. Calendar Agenda requests read-only access, stores tokens in Secret Service, and keeps event data on this computer."
         color: root.panel.mutedForeground
@@ -61,6 +64,7 @@ Column {
         )
 
         Text {
+            textFormat: Text.PlainText
             id: privacyText
             anchors.fill: parent
             anchors.margins: Style.space(10)
@@ -79,6 +83,7 @@ Column {
     Text {
         visible: !root.onboarding.configured || !root.onboarding.secretServiceAvailable
         width: parent.width
+        textFormat: Text.PlainText
         text: !root.onboarding.configured
             ? root.onboarding.configurationError
             : "Secret Service is unavailable. Install secret-tool and unlock a Secret Service provider before connecting."
@@ -92,6 +97,7 @@ Column {
     Text {
         visible: root.onboarding.lastError !== ""
         width: parent.width
+        textFormat: Text.PlainText
         text: root.onboarding.lastError
         color: root.panel.accentForeground
         font.family: Style.font.family
@@ -124,6 +130,7 @@ Column {
     }
 
     Text {
+        textFormat: Text.PlainText
         width: parent.width
         text: "You can add more accounts or remove access at any time from Settings. Removing an account never deletes calendars or events from Google."
         color: root.panel.mutedForeground
