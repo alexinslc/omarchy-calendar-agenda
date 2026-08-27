@@ -29,7 +29,7 @@ OAuth refresh tokens are stored in the user's Linux Secret Service. Account
 metadata, synchronization status, calendar metadata, and a rolling local event
 cache are stored only on the user's computer under private user permissions.
 On first use and at most once per day afterward, the plugin contacts
-`calendar.alexinslc.com` to retrieve its distributable Google desktop-client
+`omarchy.alexinslc.com` to retrieve its distributable Google desktop-client
 configuration. That endpoint does not receive Google authorization codes,
 tokens, account identity, calendars, or events. The project does not operate a
 server that receives Google user data, and the plugin does not share Google
