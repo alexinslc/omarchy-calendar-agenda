@@ -80,11 +80,13 @@ QtObject {
             Qt.exit(1)
             return
         }
+        var maliciousRangeStart = "2026-08-24T15:00:00Z"
+        var maliciousRangeEnd = "2026-09-21T15:00:00Z"
         var clippedCache = AgendaModel.parseCache({
             schemaVersion: 1,
             generatedAt: "2026-08-24T15:00:00Z",
-            rangeStart: "2026-08-24T15:00:00Z",
-            rangeEnd: "2026-09-21T15:00:00Z",
+            rangeStart: maliciousRangeStart,
+            rangeEnd: maliciousRangeEnd,
             accounts: [{ id: "personal" }],
             calendars: [{
                 accountId: "personal",
@@ -102,9 +104,18 @@ QtObject {
                 calendarName: "<img src='https://attacker.invalid/calendar'>"
             }]
         })
-        if (clippedCache.events.length !== 29
-                || clippedCache.events[0].dateKey !== "2026-08-24"
-                || clippedCache.events[28].dateKey !== "2026-09-21") {
+        var expectedFirst = AgendaModel.dayStart(new Date(maliciousRangeStart))
+        var expectedLast = AgendaModel.dayStart(new Date(maliciousRangeEnd))
+        var expectedCount = 0
+        var expectedCursor = new Date(expectedFirst)
+        while (expectedCursor <= expectedLast) {
+            expectedCount++
+            expectedCursor.setDate(expectedCursor.getDate() + 1)
+        }
+        var finalClippedEvent = clippedCache.events[clippedCache.events.length - 1]
+        if (clippedCache.events.length !== expectedCount
+                || clippedCache.events[0].dateKey !== AgendaModel.keyForDate(expectedFirst)
+                || finalClippedEvent.dateKey !== AgendaModel.keyForDate(expectedLast)) {
             console.error("cache-range expansion bound test failed")
             Qt.exit(1)
             return
