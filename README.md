@@ -7,7 +7,7 @@ giving anything permission to change your calendar.
 
 | Tokyo Night · Week | Catppuccin Latte · Day | Matte Black · Month |
 | --- | --- | --- |
-| <img src="screenshots/tokyo-night-week.png" alt="Calendar Agenda showing the week under Tokyo Night" width="280"> | <img src="screenshots/catppuccin-latte-day.png" alt="Calendar Agenda showing the day under Catppuccin Latte" width="280"> | <img src="screenshots/matte-black-month.png" alt="Calendar Agenda showing the month under Matte Black" width="280"> |
+| <img src="https://omarchy.alexinslc.com/assets/tokyo-night-week.png" alt="Calendar Agenda showing the week under Tokyo Night" width="280"> | <img src="https://omarchy.alexinslc.com/assets/catppuccin-latte-day.png" alt="Calendar Agenda showing the day under Catppuccin Latte" width="280"> | <img src="https://omarchy.alexinslc.com/assets/matte-black-month.png" alt="Calendar Agenda showing the month under Matte Black" width="280"> |
 
 The same agenda under three Omarchy themes. Colors, borders, type, and the
 surrounding desktop all follow the active theme; the calendar stays where an
@@ -41,7 +41,7 @@ installation:
 - `secret-tool`/Linux Secret Service for refresh-token storage;
 - the systemd user manager for the 15-minute background timer; and
 - a system browser plus outbound HTTPS access to Google and
-  `calendar.alexinslc.com` for authorization, synchronization, and retrieval
+  `omarchy.alexinslc.com` for authorization, synchronization, and retrieval
   of the distributable desktop OAuth configuration.
 
 There are no third-party Python modules, npm packages, privileged services, or
@@ -160,12 +160,12 @@ Calendar Agenda keeps that boundary deliberately small:
 
 On first use, the plugin retrieves its distributable Google desktop OAuth
 configuration from the fixed
-`https://calendar.alexinslc.com/oauth/client-config` endpoint. The response is
+`https://omarchy.alexinslc.com/calendar-agenda/oauth/client-config` endpoint. The response is
 strictly validated and cached with private permissions. That endpoint is not
 an OAuth broker and never receives authorization codes, tokens, account
 identity, calendars, or events.
 
-See the public [Privacy Policy](https://calendar.alexinslc.com/privacy/) and
+See the public [Privacy Policy](https://omarchy.alexinslc.com/calendar-agenda/privacy/) and
 [SECURITY.md](SECURITY.md) for the full data-handling and trust-boundary
 details.
 
@@ -245,23 +245,12 @@ The final timeout is expected because a standalone Quickshell config has no
 application-level quit handler; a successful run prints
 `agenda model tests passed`.
 
-## Public website
+## Website
 
-The OAuth homepage, privacy policy, and terms are plain static files in
-`site/`. A small Cloudflare Worker serves the fixed production desktop-client
-configuration from encrypted secret bindings and delegates every other
-request to Workers Static Assets.
-
-Preview or deploy with Omarchy's Node.js and a pinned Wrangler version:
-
-```bash
-WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 dev
-WRANGLER_SEND_METRICS=false npx --yes wrangler@4.125.0 deploy
-```
-
-No framework, analytics, Cloudflare Tunnel, project-local dependency tree, or
-global npm package is used. Never put Worker secret values in Git, `.dev.vars`,
-or command history.
+Product details, real screenshots, the privacy policy, and terms are published
+at [omarchy.alexinslc.com/calendar-agenda](https://omarchy.alexinslc.com/calendar-agenda/).
+The separately maintained website and OAuth configuration Worker are not part
+of the installable plugin checkout.
 
 ## Releases
 

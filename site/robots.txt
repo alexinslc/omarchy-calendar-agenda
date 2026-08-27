@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://calendar.alexinslc.com/sitemap.xml

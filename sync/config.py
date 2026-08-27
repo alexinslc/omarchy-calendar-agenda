@@ -20,7 +20,7 @@ DEFAULT_CONFIG_PATH = (
 DEFAULT_CACHED_CONFIG_PATH = (
     Path.home() / ".local" / "state" / "omarchy" / "calendar-agenda" / "oauth-client.json"
 )
-REMOTE_CONFIG_URL = "https://calendar.alexinslc.com/oauth/client-config"
+REMOTE_CONFIG_URL = "https://omarchy.alexinslc.com/calendar-agenda/oauth/client-config"
 REMOTE_CONFIG_MAX_AGE_SECONDS = 24 * 60 * 60
 REMOTE_CONFIG_MAX_BYTES = 4096
 CONFIG_SCHEMA_VERSION = 1

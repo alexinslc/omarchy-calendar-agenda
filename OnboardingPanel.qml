@@ -119,7 +119,7 @@ Column {
         horizontalPadding: Style.space(8)
         verticalPadding: Style.space(3)
         onClicked: Qt.openUrlExternally(
-            "https://calendar.alexinslc.com/privacy/"
+            "https://omarchy.alexinslc.com/calendar-agenda/privacy/"
         )
     }
 

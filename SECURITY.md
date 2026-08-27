@@ -22,7 +22,7 @@ removed.
 - Refresh tokens must be stored through the Linux Secret Service, never in
   source, logs, command-line arguments, or plaintext fallback files.
 - Network destinations must be fixed Google HTTPS endpoints plus the exact
-  production configuration endpoint on `calendar.alexinslc.com`.
+  production configuration endpoint on `omarchy.alexinslc.com`.
 - Event content is untrusted input and must be rendered as plain text.
 - Sync, connect, reconnect, and removal operations hold one private
   inter-process lock so a background timer cannot restore data after removal.

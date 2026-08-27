@@ -73,102 +73,25 @@ class PackageTests(unittest.TestCase):
         self.assertIn('["/usr/bin/python3", root.helperPath', service)
         self.assertEqual(service.count("Process " + "{"), 2)
 
-    def test_public_site_and_plugin_use_the_same_privacy_url(self) -> None:
-        privacy_url = "https://calendar.alexinslc.com/privacy/"
+    def test_plugin_uses_the_plugin_scoped_public_urls(self) -> None:
+        privacy_url = "https://omarchy.alexinslc.com/calendar-agenda/privacy/"
+        config_url = (
+            "https://omarchy.alexinslc.com/"
+            "calendar-agenda/oauth/client-config"
+        )
         onboarding = (ROOT / "OnboardingPanel.qml").read_text(encoding="utf-8")
-        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
-            encoding="utf-8"
-        )
+        config = (ROOT / "sync" / "config.py").read_text(encoding="utf-8")
         self.assertIn(privacy_url, onboarding)
-        self.assertIn('href="/privacy/"', homepage)
-        self.assertIn("Google API Services User Data Policy", privacy)
+        self.assertIn(config_url, config)
 
-    def test_public_site_uses_real_sanitized_product_captures(self) -> None:
-        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-        self.assertNotIn("agenda-window", homepage)
-        for filename in (
-            "tokyo-night-week.png",
-            "catppuccin-latte-day.png",
-            "matte-black-month.png",
-        ):
-            self.assertIn(f'/assets/{filename}', homepage)
-            self.assertEqual(
-                (ROOT / "site" / "assets" / filename).read_bytes(),
-                (ROOT / "screenshots" / filename).read_bytes(),
-            )
-        self.assertTrue(
-            (ROOT / "site" / "assets" / "tokyo-night-car.jpg").is_file()
-        )
-
-    def test_public_site_preserves_product_capture_aspect_ratio(self) -> None:
-        styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
-        self.assertRegex(
-            styles,
-            r"img\s*\{[^}]*\bdisplay:\s*block;[^}]*\bmax-width:\s*100%;[^}]*\bheight:\s*auto;",
-        )
-        self.assertRegex(
-            styles,
-            r"\\.shot-frame img\s*\{[^}]*aspect-ratio:\s*23\s*/\s*27;[^}]*object-fit:\s*contain;",
-        )
-        self.assertRegex(
-            styles,
-            r"\\.product-card img\s*\{[^}]*aspect-ratio:\s*23\s*/\s*27;[^}]*object-fit:\s*contain;",
-        )
-        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8").lower()
-        readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
-        self.assertNotIn("quattro", homepage)
-        self.assertNotIn("quattro", readme)
-
-    def test_public_site_matches_the_readme_product_story(self) -> None:
-        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("The same agenda under every Omarchy theme.", homepage)
-        self.assertIn("One command. Then connect Google.", homepage)
-        self.assertIn("Remove an account from Settings", homepage)
-        self.assertIn("Read-only. Local-first.", homepage)
-        self.assertNotIn("No mockups. No imaginary UI.", homepage)
-        self.assertNotIn("How it works", homepage)
-
-    def test_public_site_embeds_demo_with_a_narrow_csp_exception(self) -> None:
-        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
-        headers = (ROOT / "site" / "_headers").read_text(encoding="utf-8")
-        privacy = (ROOT / "site" / "privacy" / "index.html").read_text(
-            encoding="utf-8"
-        )
-        embed_origin = "https://www.youtube-nocookie.com"
-        self.assertIn(f'{embed_origin}/embed/VsQA0hfj4d4', homepage)
-        self.assertIn(f"frame-src {embed_origin};", headers)
-        self.assertNotIn("frame-src https://www.youtube.com", headers)
-        self.assertIn("privacy-enhanced embed", privacy)
-
-    def test_not_found_page_overrides_prose_page_padding(self) -> None:
-        not_found = (ROOT / "site" / "404.html").read_text(encoding="utf-8")
-        styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
-        self.assertIn('class="prose not-found"', not_found)
-        self.assertRegex(styles, r"\.not-found\s*\{[^}]*padding-block:\s*0;")
-
-    def test_worker_serves_site_on_the_verified_custom_domain(self) -> None:
-        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
-        self.assertEqual(config["assets"]["directory"], "./site")
-        self.assertEqual(config["assets"]["binding"], "ASSETS")
-        self.assertEqual(config["main"], "worker.js")
-        self.assertEqual(
-            config["secrets"]["required"],
-            ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
-        )
-        self.assertEqual(
-            config["routes"],
-            [{"pattern": "calendar.alexinslc.com", "custom_domain": True}],
-        )
-
-    def test_production_oauth_credentials_are_not_committed(self) -> None:
+    def test_hosted_site_and_oauth_credentials_are_not_committed(self) -> None:
         self.assertFalse((ROOT / "oauth-client.json").exists())
+        self.assertFalse((ROOT / "site").exists())
+        self.assertFalse((ROOT / "worker.js").exists())
+        self.assertFalse((ROOT / "wrangler.jsonc").exists())
+        self.assertFalse((ROOT / "screenshots").exists())
         ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("oauth-client.json", ignored)
-        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('const CLIENT_CONFIG_PATH = "/oauth/client-config";', worker)
-        self.assertIn("env.GOOGLE_OAUTH_CLIENT_ID", worker)
-        self.assertIn("env.GOOGLE_OAUTH_CLIENT_SECRET", worker)
 
     def test_agenda_has_one_settings_panel_and_visible_mode_selector(self) -> None:
         panel = (ROOT / "AgendaPanel.qml").read_text(encoding="utf-8")
