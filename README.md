@@ -50,7 +50,7 @@ Remove connected accounts before uninstalling the plugin.
 
 ## Privacy
 
-- Google access is limited to calendar-list and event read-only scopes.
+- Google access is limited to `openid`/`email` identity plus calendar-list and event read-only scopes.
 - Sign-in happens in the system browser using PKCE.
 - Refresh tokens are stored in Linux Secret Service.
 - Calendar data stays in private local files on your computer.
