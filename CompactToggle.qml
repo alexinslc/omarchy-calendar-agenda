@@ -21,6 +21,7 @@ BorderSurface {
         anchors.left: parent.left
         anchors.leftMargin: root.borderLeft + Style.spacing.rowPaddingX
         anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
         text: root.label
         color: root.foreground
         font.family: Style.font.family
