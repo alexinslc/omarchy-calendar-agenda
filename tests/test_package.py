@@ -103,11 +103,22 @@ class PackageTests(unittest.TestCase):
 
     def test_public_site_preserves_product_capture_aspect_ratio(self) -> None:
         styles = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
-        self.assertIn("img { display: block; max-width: 100%; height: auto; }", styles)
-        self.assertIn("aspect-ratio: 23 / 27; object-fit: contain;", styles)
-        self.assertNotIn("quattro", (ROOT / "site" / "index.html").read_text(
-            encoding="utf-8"
-        ).lower())
+        self.assertRegex(
+            styles,
+            r"img\s*\{[^}]*\bdisplay:\s*block;[^}]*\bmax-width:\s*100%;[^}]*\bheight:\s*auto;",
+        )
+        self.assertRegex(
+            styles,
+            r"\\.shot-frame img\s*\{[^}]*aspect-ratio:\s*23\s*/\s*27;[^}]*object-fit:\s*contain;",
+        )
+        self.assertRegex(
+            styles,
+            r"\\.product-card img\s*\{[^}]*aspect-ratio:\s*23\s*/\s*27;[^}]*object-fit:\s*contain;",
+        )
+        homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8").lower()
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+        self.assertNotIn("quattro", homepage)
+        self.assertNotIn("quattro", readme)
 
     def test_public_site_matches_the_readme_product_story(self) -> None:
         homepage = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
