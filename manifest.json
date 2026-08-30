@@ -3,7 +3,7 @@
   "id": "io.github.alexinslc.calendar-agenda",
   "name": "Calendar Agenda",
   "version": "0.2.1",
-  "author": "Alex Inslee",
+  "author": "alexinslc",
   "license": "MIT",
   "description": "A private, read-only Google Calendar agenda with guided account setup.",
   "kinds": [
